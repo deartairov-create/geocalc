@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoCalc</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="dark">
+  <div class="brand-mark">GeoCalc</div>
+
+  <header class="topbar hidden" id="topbar">
+    <div class="logo">
+      <span id="logoMain">GeoCalc</span>
+      <span id="logoSub">(Maydon yuzasini hisoblash)</span>
+    </div>
+    <button id="profileBtn" class="btn btn-ghost">Profil</button>
+  </header>
+
+  <main id="loginPage" class="page center-page">
+    <section class="card auth-card glass-card">
+      <div class="hero-orb hero-orb-1"></div>
+      <div class="hero-orb hero-orb-2"></div>
+
+      <h1 id="appTitle">GeoCalc</h1>
+      <p id="loginDesc">Koordinata va maydon hisoblash platformasi</p>
+
+      <button id="googleLoginBtn" class="btn btn-primary">
+        <span id="googleBtnText">Google orqali kirish</span>
+      </button>
+    </section>
+  </main>
+
+  <main id="homePage" class="page center-page hidden">
+    <section class="home-wrap">
+      <button id="areaBtn" class="tool-btn glass-card">
+        <span id="areaBtnTitle" class="tool-title">1. Yuza hisoblash</span>
+        <span id="areaBtnSub" class="tool-sub">WGS84 · m² · km² · gektar</span>
+      </button>
+
+      <button id="convertBtn" class="tool-btn glass-card">
+        <span id="convertBtnTitle" class="tool-title">2. Konvertor</span>
+        <span id="convertBtnSub" class="tool-sub">O‘nli gradus ↔ GMS va nusxa olish</span>
+      </button>
+
+      <button class="tool-btn disabled glass-card" disabled>
+        <span id="thirdBtnTitle" class="tool-title">3. Hozircha yo‘q</span>
+        <span id="thirdBtnSub" class="tool-sub">Keyin qo‘shiladi</span>
+      </button>
+    </section>
+  </main>
+
+  <main id="profilePage" class="page center-page hidden">
+    <section class="card profile-card glass-card">
+      <div class="profile-top">
+        <img
+          id="profileAvatar"
+          src="https://via.placeholder.com/84"
+          alt="profile"
+        />
+        <div>
+          <h2 id="profileName">Demo User</h2>
+          <p id="profileEmail">demo.user@gmail.com</p>
+        </div>
+      </div>
+
+      <div class="settings-list">
+        <div class="setting-item">
+          <span id="historyLabel">Tarix</span>
+          <button class="btn btn-ghost" id="historyBtn">Ochish</button>
+        </div>
+
+        <div class="setting-item">
+          <label for="languageSelect" id="languageLabel">Til</label>
+          <select id="languageSelect">
+            <option value="uz">O‘zbekcha</option>
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <span id="themeLabel">Kun / Tun</span>
+          <button id="themeToggle" class="btn btn-ghost">Kun / Tun</button>
+        </div>
+      </div>
+
+      <div class="history-section">
+        <h3 id="historyTitle">Tarix</h3>
+        <div id="historyList" class="history-list">
+          <div class="history-empty">Hali tarix yo‘q</div>
+        </div>
+        <button id="clearHistoryBtn" class="btn btn-ghost">Tarixni tozalash</button>
+      </div>
+
+      <div class="profile-actions">
+        <button id="backHomeBtn" class="btn btn-ghost">Bosh sahifa</button>
+        <button id="signOutBtn" class="btn btn-danger">Chiqish</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="areaPage" class="page center-page hidden">
+    <section class="card area-card glass-card">
+      <button id="backFromArea" class="btn btn-ghost area-back-btn">Ortga</button>
+
+      <h2 id="areaPageTitle">Yuza hisoblash</h2>
+      <p id="areaPageDesc">
+        Nuqtalarni har qatorda kiriting:
+        <br />
+        41.3315648 61.4165166
+        <br />
+        yoki
+        <br />
+        41.3315648, 61.4165166
+      </p>
+
+      <div id="areaHint" class="area-hint">
+        Hisoblash faqat WGS 84 koordinatalari asosida bajariladi.
+      </div>
+
+      <textarea
+        id="coordsInput"
+        class="coords-textarea"
+        placeholder="41.3315648 61.4165166
+41.3321000 61.4172000
+41.3312000 61.4180000
+41.3306000 61.4171000"
+      ></textarea>
+
+      <div class="area-actions">
+        <button id="calculateAreaBtn" class="btn btn-primary">Hisoblash</button>
+        <button id="clearAreaBtn" class="btn btn-ghost">Tozalash</button>
+      </div>
+
+      <div id="areaError" class="area-error hidden"></div>
+
+      <div class="shape-preview-wrap">
+        <canvas id="shapeCanvas" width="640" height="420"></canvas>
+      </div>
+
+      <div id="areaResult" class="area-result hidden">
+        <div class="result-box">
+          <span>m²</span>
+          <strong id="resultM2">0</strong>
+        </div>
+
+        <div class="result-box">
+          <span id="resultHaUnit">gektar</span>
+          <strong id="resultHa">0</strong>
+        </div>
+
+        <div class="result-box">
+          <span>km²</span>
+          <strong id="resultKm2">0</strong>
+        </div>
+
+        <div class="result-box">
+          <span id="resultPointsLabel">Nuqtalar soni</span>
+          <strong id="resultPoints">0</strong>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <main id="converterPage" class="page center-page hidden">
+    <section class="card converter-card glass-card">
+      <h2 id="converterPageTitle">Konvertor</h2>
+      <p id="converterPageDesc">
+        O‘nli gradus va DMS formatlari orasida o‘tkazish.
+      </p>
+
+      <div class="converter-block">
+        <h3 id="converterBlock1Title">O‘nli gradus → GMS</h3>
+
+        <div class="converter-field">
+          <label for="ddInput" id="ddInputLabel">O‘nli qiymat</label>
+          <input id="ddInput" type="number" step="any" placeholder="61.05164" />
+        </div>
+
+        <div class="converter-field">
+          <label for="ddType" id="ddTypeLabel">Turi</label>
+          <select id="ddType">
+            <option value="lon">Uzunlik</option>
+            <option value="lat">Kenglik</option>
+          </select>
+        </div>
+
+        <div class="converter-actions">
+          <button id="convertToDmsBtn" class="btn btn-primary">GMS ga o‘tkazish</button>
+          <button id="copyDmsBtn" class="btn btn-ghost">Nusxa olish</button>
+        </div>
+
+        <div class="converter-output">
+          <span id="dmsResultLabel">GMS natija</span>
+          <strong id="dmsResult">-</strong>
+        </div>
+      </div>
+
+      <div class="converter-block">
+        <h3 id="converterBlock2Title">GMS → O‘nli gradus</h3>
+
+        <div class="converter-grid">
+          <div class="converter-field">
+            <label for="degInput" id="degInputLabel">Gradus</label>
+            <input id="degInput" type="number" step="any" placeholder="61" />
+          </div>
+
+          <div class="converter-field">
+            <label for="minInput" id="minInputLabel">Minut</label>
+            <input id="minInput" type="number" step="any" placeholder="3" />
+          </div>
+
+          <div class="converter-field">
+            <label for="secInput" id="secInputLabel">Sekund</label>
+            <input id="secInput" type="number" step="any" placeholder="5.90" />
+          </div>
+        </div>
+
+        <div class="converter-field">
+          <label for="hemisphereSelect" id="hemisphereLabel">Yo‘nalish</label>
+          <select id="hemisphereSelect">
+            <option value="E">E</option>
+            <option value="W">W</option>
+            <option value="N">N</option>
+            <option value="S">S</option>
+          </select>
+        </div>
+
+        <div class="converter-actions">
+          <button id="convertToDdBtn" class="btn btn-primary">O‘nli gradusga o‘tkazish</button>
+          <button id="copyDdBtn" class="btn btn-ghost">Nusxa olish</button>
+        </div>
+
+        <div class="converter-output">
+          <span id="ddResultLabel">O‘nli natija</span>
+          <strong id="ddResult">-</strong>
+        </div>
+      </div>
+
+      <button id="backFromConverter" class="btn btn-ghost">Ortga</button>
+    </section>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

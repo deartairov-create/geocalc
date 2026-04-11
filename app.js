@@ -111,10 +111,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       areaPageTitle: "Yuza hisoblash",
       areaPageDesc:
-        "Nuqtalarni har qatorda kiriting:\n41.3315648 61.4165166\nyoki\n41.3315648, 61.4165166",
+        "Nuqtalarni har qatorda kiriting:\nXX.XXXXXXX YY.YYYYYYY\nyoki\nXX.XXXXXXX, YY.YYYYYYY",
       areaHint: "Hisoblash faqat WGS 84 koordinatalari asosida bajariladi.",
       coordsPlaceholder:
-        "41.3315648 61.4165166\n41.3321000 61.4172000\n41.3312000 61.4180000\n41.3306000 61.4171000",
+        "XX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY",
       calculateAreaBtn: "Hisoblash",
       clearAreaBtn: "Tozalash",
       backFromArea: "Ortga",

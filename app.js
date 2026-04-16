@@ -94,8 +94,8 @@ document.addEventListener("DOMContentLoaded", () => {
       areaBtnSub: "WGS84 · m² · km² · gektar",
       convertBtnTitle: "2. Konvertor",
       convertBtnSub: "O‘nli gradus ↔ GMS va nusxa olish",
-      thirdBtnTitle: "3. Hozircha yo‘q",
-      thirdBtnSub: "Keyin qo‘shiladi",
+      thirdBtnTitle: "3. Hajmni hisoblash",
+      thirdBtnSub: "Tez orada qo‘shiladi",
 
       historyLabel: "Tarix",
       historyBtn: "Ochish",
@@ -169,8 +169,8 @@ document.addEventListener("DOMContentLoaded", () => {
       areaBtnSub: "WGS84 · m² · km² · hectare",
       convertBtnTitle: "2. Converter",
       convertBtnSub: "Decimal Degrees ↔ DMS and copy",
-      thirdBtnTitle: "3. Not available yet",
-      thirdBtnSub: "Will be added later",
+      thirdBtnTitle: "Volume Calculation",
+      thirdBtnSub: "Coming soon",
 
       historyLabel: "History",
       historyBtn: "Open",
@@ -244,8 +244,8 @@ document.addEventListener("DOMContentLoaded", () => {
       areaBtnSub: "WGS84 · м² · км² · гектар",
       convertBtnTitle: "2. Конвертер",
       convertBtnSub: "Десятичные градусы ↔ ГМС и копирование",
-      thirdBtnTitle: "3. Пока недоступно",
-      thirdBtnSub: "Будет добавлено позже",
+      thirdBtnTitle: "3. Расчёт объёма",
+      thirdBtnSub: "Скоро будет доступно",
 
       historyLabel: "История",
       historyBtn: "Открыть",

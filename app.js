@@ -186,10 +186,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       areaPageTitle: "Area Calculation",
       areaPageDesc:
-        "Enter points line by line:\n41.3315648 61.4165166\nor\n41.3315648, 61.4165166",
+        "Enter points line by line:\nXX.XXXXXXX YY.YYYYYYY\nor\nXX.XXXXXXX, YY.YYYYYYY",
       areaHint: "Calculation is performed only using WGS 84 coordinates.",
       coordsPlaceholder:
-        "41.3315648 61.4165166\n41.3321000 61.4172000\n41.3312000 61.4180000\n41.3306000 61.4171000",
+        "XX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY",
       calculateAreaBtn: "Calculate",
       clearAreaBtn: "Clear",
       backFromArea: "Back",
@@ -261,10 +261,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       areaPageTitle: "Расчёт площади",
       areaPageDesc:
-        "Введите точки построчно:\n41.3315648 61.4165166\nили\n41.3315648, 61.4165166",
+        "Введите точки построчно:\nXX.XXXXXXX YY.YYYYYYY\nили\nXX.XXXXXXX, YY.YYYYYYY",
       areaHint: "Расчёт выполняется только по координатам WGS 84.",
       coordsPlaceholder:
-        "41.3315648 61.4165166\n41.3321000 61.4172000\n41.3312000 61.4180000\n41.3306000 61.4171000",
+        "XX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY\nXX.XXXXXXX YY.YYYYYYY",
       calculateAreaBtn: "Рассчитать",
       clearAreaBtn: "Очистить",
       backFromArea: "Назад",

@@ -14,8 +14,6 @@ import {
 import { calculateCutFill, parseVolumeRows } from "@/lib/volume";
 import { verifyGeoCalcUser } from "@/lib/firebase-server";
 
-export const maxDuration = 60;
-
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -41,77 +39,126 @@ const MAX_ATTACHMENTS = 4;
 
 const rateStore = new Map<string, RateState>();
 
-const GEOAI_TOOLS = [
+const DEFAULT_GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+const RETIRED_GEMINI_15_PATTERN = /^(?:models\/)?gemini-1\.5(?:-|$)/i;
+
+function resolveGeminiModel(configuredModel?: string) {
+  const cleaned = (configuredModel || "").trim().replace(/^models\//i, "");
+  if (!cleaned) return DEFAULT_GEMINI_MODEL;
+
+  // Gemini 1.5 endpoints are retired. Keep old deployments working by
+  // transparently moving legacy 1.5 model names to the current stable Flash model.
+  if (RETIRED_GEMINI_15_PATTERN.test(cleaned)) return DEFAULT_GEMINI_MODEL;
+  return cleaned;
+}
+
+function geoAIUpstreamError(status: number, upstreamMessage = "") {
+  const normalized = upstreamMessage.toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return "Gemini API kaliti qabul qilinmadi yoki bu loyiha uchun ruxsat berilmagan. GEMINI_API_KEY ni tekshiring.";
+  }
+
+  if (status === 429) {
+    return "Gemini API limiti tugagan yoki so‘rovlar juda ko‘p. Google AI Studio kvotasi/billing holatini tekshiring.";
+  }
+
+  if (status === 400 || status === 404 || normalized.includes("model")) {
+    return "Tanlangan Gemini modeli mavjud emas yoki bu endpointda ishlamaydi. GEMINI_MODEL ni gemini-3.6-flash ga o‘rnating.";
+  }
+
+  return "GeoAI Gemini xizmatidan javob ololmadi. Server sozlamalari va Gemini API holatini tekshiring.";
+}
+
+type InteractionStep = {
+  type?: string;
+  id?: string;
+  name?: string;
+  arguments?: unknown;
+  content?: Array<{ type?: string; text?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+};
+
+type InteractionPayload = {
+  output_text?: string;
+  steps?: InteractionStep[];
+  error?: { message?: string };
+};
+
+const GEOAI_TOOLS: Array<Record<string, unknown>> = [
+  { type: "google_search" },
+  { type: "code_execution" },
   {
-    functionDeclarations: [
-      {
-        name: "calculate_land_area",
-        description:
-          "GeoCalc'ning saqlangan WGS84/UTM formulasida koordinatalardan maydon va perimetr hisoblaydi.",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            coordinates: {
-              type: "STRING",
-              description: "Kamida 3 qator WGS84 koordinata. Masalan: 41.31 69.24",
-            },
-          },
-          required: ["coordinates"],
+    type: "function",
+    name: "calculate_land_area",
+    description:
+      "GeoCalc'ning saqlangan WGS84/UTM formulasida koordinatalardan maydon va perimetr hisoblaydi. coordinates har qatorda 'latitude longitude' bo'ladi.",
+    parameters: {
+      type: "object",
+      properties: {
+        coordinates: {
+          type: "string",
+          description: "Kamida 3 qator WGS84 koordinata. Masalan: 41.31 69.24",
         },
       },
-      {
-        name: "convert_decimal_to_dms",
-        description: "O'nli koordinatani gradus-minut-sekund (GMS/DMS) formatiga o'tkazadi.",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            value: { type: "NUMBER", description: "O'nli koordinata qiymati" },
-            coordinate_type: {
-              type: "STRING",
-              enum: ["lat", "lon"],
-              description: "lat — kenglik, lon — uzunlik",
-            },
-          },
-          required: ["value", "coordinate_type"],
+      required: ["coordinates"],
+    },
+  },
+  {
+    type: "function",
+    name: "convert_decimal_to_dms",
+    description: "O'nli koordinatani gradus-minut-sekund (GMS/DMS) formatiga o'tkazadi.",
+    parameters: {
+      type: "object",
+      properties: {
+        value: { type: "number", description: "O'nli koordinata qiymati" },
+        coordinate_type: {
+          type: "string",
+          enum: ["lat", "lon"],
+          description: "lat — kenglik, lon — uzunlik",
         },
       },
-      {
-        name: "convert_dms_to_decimal",
-        description: "Gradus-minut-sekund koordinatani o'nli formatga o'tkazadi.",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            degrees: { type: "NUMBER" },
-            minutes: { type: "NUMBER" },
-            seconds: { type: "NUMBER" },
-            hemisphere: { type: "STRING", enum: ["N", "S", "E", "W"] },
-          },
-          required: ["degrees", "minutes", "seconds", "hemisphere"],
+      required: ["value", "coordinate_type"],
+    },
+  },
+  {
+    type: "function",
+    name: "convert_dms_to_decimal",
+    description: "Gradus-minut-sekund koordinatani o'nli formatga o'tkazadi.",
+    parameters: {
+      type: "object",
+      properties: {
+        degrees: { type: "number" },
+        minutes: { type: "number" },
+        seconds: { type: "number" },
+        hemisphere: { type: "string", enum: ["N", "S", "E", "W"] },
+      },
+      required: ["degrees", "minutes", "seconds", "hemisphere"],
+    },
+  },
+  {
+    type: "function",
+    name: "calculate_cut_fill",
+    description:
+      "GeoCalc TIN usulida qazish (cut), to'ldirish (fill), sof hajm va reja maydonini hisoblaydi.",
+    parameters: {
+      type: "object",
+      properties: {
+        rows: {
+          type: "string",
+          description:
+            "Har qatorda X Y mavjudZ; per_point rejimida X Y mavjudZ loyihaZ.",
+        },
+        coordinate_mode: { type: "string", enum: ["local", "wgs84"] },
+        design_mode: { type: "string", enum: ["level", "per_point"] },
+        design_level: {
+          type: "number",
+          description: "design_mode=level bo'lsa umumiy loyiha balandligi",
         },
       },
-      {
-        name: "calculate_cut_fill",
-        description:
-          "GeoCalc TIN usulida qazish (cut), to'ldirish (fill), sof hajm va reja maydonini hisoblaydi.",
-        parameters: {
-          type: "OBJECT",
-          properties: {
-            rows: {
-              type: "STRING",
-              description:
-                "Har qatorda X Y mavjudZ; per_point rejimida X Y mavjudZ loyihaZ.",
-            },
-            coordinate_mode: { type: "STRING", enum: ["local", "wgs84"] },
-            design_mode: { type: "STRING", enum: ["level", "per_point"] },
-            design_level: {
-              type: "NUMBER",
-              description: "design_mode=level bo'lsa umumiy loyiha balandligi",
-            },
-          },
-          required: ["rows", "coordinate_mode", "design_mode"],
-        },
-      },
-    ],
+      required: ["rows", "coordinate_mode", "design_mode"],
+    },
   },
 ];
 
@@ -161,7 +208,13 @@ function executeGeoCalcFunction(name: string, rawArguments: unknown) {
       if (coordinateType !== "lat" && coordinateType !== "lon") {
         throw new Error("coordinate_type faqat lat yoki lon bo'lishi mumkin.");
       }
-      return { ok: true, decimal: value, dms: toDMS(value, coordinateType as "lat" | "lon") };
+      if (coordinateType === "lat" && Math.abs(value) > 90) {
+        throw new Error("Kenglik −90…90 oralig'ida bo'lishi kerak.");
+      }
+      if (coordinateType === "lon" && Math.abs(value) > 180) {
+        throw new Error("Uzunlik −180…180 oralig'ida bo'lishi kerak.");
+      }
+      return { ok: true, decimal: value, dms: toDMS(value, coordinateType) };
     }
 
     if (name === "convert_dms_to_decimal") {
@@ -169,6 +222,9 @@ function executeGeoCalcFunction(name: string, rawArguments: unknown) {
       const minutes = requiredNumber(args, "minutes");
       const seconds = requiredNumber(args, "seconds");
       const hemisphere = requiredString(args, "hemisphere").toUpperCase();
+      if (!(["N", "S", "E", "W"] as string[]).includes(hemisphere)) {
+        throw new Error("hemisphere N, S, E yoki W bo'lishi kerak.");
+      }
       const decimal = fromDMS(
         degrees,
         minutes,
@@ -182,7 +238,14 @@ function executeGeoCalcFunction(name: string, rawArguments: unknown) {
       const rows = requiredString(args, "rows");
       const coordinateMode = requiredString(args, "coordinate_mode");
       const designMode = requiredString(args, "design_mode");
-      const designLevel = designMode === "level" ? requiredNumber(args, "design_level") : 0;
+      if (coordinateMode !== "local" && coordinateMode !== "wgs84") {
+        throw new Error("coordinate_mode local yoki wgs84 bo'lishi kerak.");
+      }
+      if (designMode !== "level" && designMode !== "per_point") {
+        throw new Error("design_mode level yoki per_point bo'lishi kerak.");
+      }
+      const designLevel =
+        designMode === "level" ? requiredNumber(args, "design_level") : 0;
       const normalizedDesignMode = designMode === "per_point" ? "per-point" : "level";
       const points = parseVolumeRows(rows, coordinateMode, normalizedDesignMode, designLevel);
       const result = calculateCutFill(points);
@@ -258,11 +321,54 @@ function isSafeAttachment(value: unknown): value is GeoAIAttachment {
   return false;
 }
 
+function extractOutput(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const response = payload as InteractionPayload;
+
+  if (typeof response.output_text === "string") {
+    return response.output_text.trim();
+  }
+
+  if (!Array.isArray(response.steps)) return "";
+
+  return response.steps
+    .filter((step) => step?.type === "model_output" && Array.isArray(step.content))
+    .flatMap((step) => step.content ?? [])
+    .filter((block) => block?.type === "text" && typeof block.text === "string")
+    .map((block) => String(block.text).trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
 function withMandatoryContact(answer: string) {
-  const marker = "Xizmat, murojaat, shikoyat, qonunbuzarliklar va takliflar uchun";
+  const marker =
+    "Xizmat, murojaat, shikoyat, qonunbuzarliklar va takliflar uchun";
   const markerIndex = answer.indexOf(marker);
   const body = (markerIndex >= 0 ? answer.slice(0, markerIndex) : answer).trim();
-  return `${body || "Savolingiz bo‘yicha aniq javob tayyor bo‘lmadi."}\n\n${GEOAI_CONTACT_TEXT}`;
+  return `${body || "Savolingiz bo‘yicha aniq javob tayyor bo‘lmadi. Iltimos, ma’lumotni boshqacha yozib ko‘ring."}\n\n${GEOAI_CONTACT_TEXT}`;
+}
+
+export async function GET() {
+  const configuredModel = process.env.GEMINI_MODEL;
+  const model = resolveGeminiModel(configuredModel);
+  const configured = Boolean(process.env.GEMINI_API_KEY);
+
+  return NextResponse.json(
+    {
+      ok: configured,
+      configured,
+      model,
+      legacyModelMigrated: Boolean(
+        configuredModel && RETIRED_GEMINI_15_PATTERN.test(configuredModel.trim()),
+      ),
+      authRequired: true,
+    },
+    {
+      status: configured ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -284,7 +390,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "GeoAI server kaliti (GEMINI_API_KEY) kiritilmagan." },
+      { error: "GeoAI server kaliti sozlanmagan. Vercel → Settings → Environment Variables ichida GEMINI_API_KEY ni qo‘shing va loyihani Redeploy qiling." },
       { status: 503 },
     );
   }
@@ -316,125 +422,126 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
-
-  // Tarixni qo'shish
-  if (Array.isArray(body.history)) {
-    body.history.slice(-6).forEach((item) => {
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .filter(
+      (item): item is ChatMessage =>
+        Boolean(
+          item &&
+            (item.role === "user" || item.role === "assistant") &&
+            typeof item.content === "string",
+        ),
+    )
+    .slice(-8)
+    .map((item) => {
       const contactIndex = item.content.indexOf(GEOAI_CONTACT_TEXT.split("\n")[0]);
       const content = contactIndex >= 0 ? item.content.slice(0, contactIndex) : item.content;
-      contents.push({
-        role: item.role === "assistant" ? "model" : "user",
-        parts: [{ text: content.slice(0, 3000) }],
-      });
-    });
-  }
+      return `${item.role === "user" ? "Foydalanuvchi" : "GeoAI"}: ${content.slice(0, 4_000)}`;
+    })
+    .join("\n\n");
 
-  // Yangi so'rov
-  const currentParts: Array<Record<string, unknown>> = [];
-  if (message) {
-    currentParts.push({ text: message });
-  }
+  const inputItems: Array<{ type: string; [key: string]: unknown }> = [
+    {
+      type: "text",
+      text: `Oldingi suhbat:\n${history || "Yangi suhbat."}\n\nFoydalanuvchining yangi so‘rovi:\n${message || "Biriktirilgan faylni tahlil qiling."}`,
+    },
+  ];
 
   for (const attachment of attachments) {
     if (attachment.kind === "image") {
-      const base64Data = attachment.data.includes(",")
-        ? attachment.data.split(",")[1]
-        : attachment.data;
-      currentParts.push({
-        inline_data: {
-          mime_type: attachment.mimeType,
-          data: base64Data,
-        },
+      inputItems.push({
+        type: "image",
+        mime_type: attachment.mimeType,
+        data: attachment.data,
       });
     } else {
-      currentParts.push({
-        text: `\n--- Fayl: ${attachment.name} ---\n${attachment.content}\n--- Fayl oxiri ---`,
+      inputItems.push({
+        type: "text",
+        text: `\n--- ${attachment.name} (${attachment.mimeType}) fayli boshlandi ---\n${attachment.content}\n--- ${attachment.name} fayli tugadi ---`,
       });
     }
   }
 
-  contents.push({ role: "user", parts: currentParts });
+  const endpoint = process.env.GEMINI_API_URL || DEFAULT_GEMINI_API_URL;
+  const configuredModel = process.env.GEMINI_MODEL;
+  const model = resolveGeminiModel(configuredModel);
+
+  if (configuredModel && RETIRED_GEMINI_15_PATTERN.test(configuredModel.trim())) {
+    console.warn(
+      `GeoAI: ${configuredModel} is retired; using ${model} instead. Update GEMINI_MODEL in deployment settings.`,
+    );
+  }
 
   try {
+    let interactionInput: InteractionStep[] = [
+      { type: "user_input", content: inputItems },
+    ];
     let answer = "";
 
-    for (let round = 0; round < 3; round += 1) {
-      const response = await fetch(url, {
+    for (let round = 0; round < 4; round += 1) {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: GEOAI_SYSTEM_PROMPT }],
-          },
-          contents,
+          model,
+          system_instruction: GEOAI_SYSTEM_PROMPT,
+          input: interactionInput,
           tools: GEOAI_TOOLS,
+          store: false,
         }),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(55_000),
       });
 
-      const data = await response.json();
-
+      const payload = (await response.json()) as InteractionPayload;
       if (!response.ok) {
-        console.error("Gemini API Xatosi:", data);
+        const upstreamMessage = payload.error?.message || "";
+        console.error("GeoAI upstream error", response.status, upstreamMessage);
         return NextResponse.json(
-          { error: `Gemini API Xatosi: ${data.error?.message || "Noma'lum xato"}` },
-          { status: 502 },
+          { error: geoAIUpstreamError(response.status, upstreamMessage) },
+          { status: response.status === 429 ? 429 : 502 },
         );
       }
 
-      const candidate = data.candidates?.[0];
-      const parts = candidate?.content?.parts || [];
+      answer = extractOutput(payload) || answer;
+      const steps = Array.isArray(payload.steps) ? payload.steps : [];
+      const functionCalls = steps.filter(
+        (step) =>
+          step.type === "function_call" &&
+          typeof step.id === "string" &&
+          typeof step.name === "string",
+      );
 
-      let functionCallFound = false;
+      if (!functionCalls.length) break;
 
-      for (const part of parts) {
-        if (part.text) {
-          answer += part.text;
-        }
-        if (part.functionCall) {
-          functionCallFound = true;
-          const { name, args } = part.functionCall;
-          const result = executeGeoCalcFunction(name, args);
+      const functionResults: InteractionStep[] = functionCalls.map((step) => ({
+        type: "function_result",
+        name: step.name,
+        call_id: step.id,
+        result: [
+          {
+            type: "text",
+            text: JSON.stringify(executeGeoCalcFunction(step.name as string, step.arguments)),
+          },
+        ],
+      }));
 
-          contents.push({
-            role: "model",
-            parts: [{ functionCall: part.functionCall }],
-          });
-
-          contents.push({
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name,
-                  response: result,
-                },
-              },
-            ],
-          });
-        }
-      }
-
-      if (!functionCallFound) break;
+      interactionInput = [...interactionInput, ...steps, ...functionResults];
     }
 
     return NextResponse.json(
       { answer: withMandatoryContact(answer) },
-      { headers: { "Cache-Control": "no-store" } },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
     );
   } catch (error) {
-    console.error("GeoAI API xatolik:", error);
+    console.error("GeoAI request failed", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? `GeoAI Server Xatosi: ${error.message}`
-            : "GeoAI so'rovida vaqt tugadi.",
-      },
+      { error: "GeoAI bilan bog‘lanishda vaqtinchalik xato yuz berdi." },
       { status: 504 },
     );
   }

@@ -30,7 +30,7 @@ GEMINI_MODEL=gemini-3.6-flash
 GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta/interactions
 ```
 
-API kalitiga hech qachon `NEXT_PUBLIC_` prefiksini bermang va `.env.local` faylini Git'ga qo‘shmang.
+API kalitiga hech qachon `NEXT_PUBLIC_` prefiksini bermang va `.env.local` faylini Git'ga qo‘shmang. `gemini-1.5-flash` 2025-09-29 dan beri o‘chirilgan; eski environment qiymati qolib ketgan bo‘lsa, GeoAI uni avtomatik `gemini-3.6-flash` ga almashtiradi.
 
 ## Google orqali kirish
 
@@ -47,7 +47,7 @@ GeoAI API har bir so‘rovdagi Firebase ID tokenni serverda tekshiradi. Google o
 1. Loyihani GitHub repozitoriyasiga yuklang.
 2. Vercel'da **Add New → Project** orqali repozitoriyni tanlang.
 3. Framework preset avtomatik `Next.js` bo‘ladi; `vercel.json` build buyruğini sozlaydi.
-4. **Settings → Environment Variables** ichida `GEMINI_API_KEY` ni Production, Preview va Development uchun kiriting.
+4. **Settings → Environment Variables** ichida `GEMINI_API_KEY` ni Production, Preview va Development uchun kiriting. `GEMINI_MODEL` uchun `gemini-3.6-flash` tavsiya etiladi.
 5. Kerak bo‘lsa `GEMINI_MODEL` va `GEMINI_API_URL` ni ham `.env.example` dagi qiymatlar bilan qo‘shing.
 6. Deploy tugmasini bosing va `geocalc.uz` domenini loyiha domenlariga ulang.
 7. Yangi Vercel domenini Firebase **Authorized domains** ro‘yxatiga ham qo‘shing.
@@ -59,7 +59,7 @@ npm run build:vercel
 npm run lint
 ```
 
-GeoAI endpointda vaqtinchalik tezlik cheklovi, so‘rov hajmi nazorati va server-only API kalit ishlatilgan. Ishlab chiqarishda Gemini billing/usage alertlarini ham yoqish tavsiya etiladi.
+GeoAI endpointda vaqtinchalik tezlik cheklovi, so‘rov hajmi nazorati va server-only API kalit ishlatilgan. `GET /api/geoai` orqali server konfiguratsiyasi tayyorligini tekshirish mumkin; bu endpoint API kalitini oshkor qilmaydi. Ishlab chiqarishda Gemini billing/usage alertlarini ham yoqish tavsiya etiladi.
 
 ## Hisoblash metodlari
 

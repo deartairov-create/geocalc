@@ -1039,7 +1039,7 @@ function GeoAIChat({ notify }: { notify: (message: string) => void }) {
     {
       id: "welcome",
       role: "assistant",
-      content: `Assalomu alaykum! Men GeoAI. Koordinatalar, geodeziya, KML/CSV/DXF fayllari, Cut & Fill yoki rasmdagi jadvalni o‘qish bo‘yicha yordam beraman.\n\n${GEOAI_CONTACT_TEXT}`,
+      content: `Assalomu alaykum! Men GeoAI. Menga istalgan savolni bering: umumiy bilim, matematika, dasturlash, tarjima, matn, fayl yoki rasm tahlili. Geodeziya, koordinatalar, KML/CSV/DXF va Cut & Fill bo‘yicha esa maxsus GeoCalc vositalarim bor.\n\n${GEOAI_CONTACT_TEXT}`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -1162,9 +1162,9 @@ function GeoAIChat({ notify }: { notify: (message: string) => void }) {
   };
 
   const quickPrompts = [
+    "Bugungi eng muhim texnologiya yangiliklarini ayt",
+    "Python kodimdagi xatoni topishga yordam ber",
     "WGS84 va UTM farqini sodda tushuntir",
-    "KML faylimni tekshirib ber",
-    "Cut & Fill natijasini qanday tekshiraman?",
   ];
 
   return (
@@ -1230,7 +1230,7 @@ function GeoAIChat({ notify }: { notify: (message: string) => void }) {
                 void send();
               }
             }}
-            placeholder="Koordinata, fayl yoki geodeziya haqida yozing…"
+            placeholder="GeoAI’ga istalgan savolingizni yozing…"
             rows={1}
           />
           <button className="composer-send" disabled={sending || (!input.trim() && !attachments.length)} onClick={() => void send()} aria-label="Yuborish">
@@ -1244,10 +1244,10 @@ function GeoAIChat({ notify }: { notify: (message: string) => void }) {
         <div className="panel capability-card">
           <span className="side-eyebrow">GEOAI NIMALARNI BILADI?</span>
           <ul>
-            <li><MapPin size={17} /><span><strong>Koordinatalar</strong>WGS84, UTM, GMS va format xatolari</span></li>
-            <li><FileText size={17} /><span><strong>Fayllar</strong>KML, CSV, DXF va XYZ matn tahlili</span></li>
-            <li><ImageIcon size={17} /><span><strong>OCR</strong>Rasmdagi jadval va koordinata matni</span></li>
-            <li><BoxIcon size={17} /><span><strong>Cut & Fill</strong>Hajm, loyiha sathi va TIN izohi</span></li>
+            <li><Sparkles size={17} /><span><strong>Universal yordamchi</strong>Ta’lim, matn, tarjima, g‘oya va umumiy savollar</span></li>
+            <li><FileText size={17} /><span><strong>Kod va fayllar</strong>Kod, KML, CSV, DXF, TXT va XYZ tahlili</span></li>
+            <li><ImageIcon size={17} /><span><strong>Rasm tahlili</strong>JPG, PNG va WebP rasmlaridagi ma’lumotni tushunish</span></li>
+            <li><MapPin size={17} /><span><strong>GeoCalc ekspertizasi</strong>WGS84, UTM, GMS, maydon va Cut & Fill</span></li>
           </ul>
         </div>
         <div className="panel privacy-card">

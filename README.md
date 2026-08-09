@@ -1,74 +1,66 @@
-# GeoCalc
+# GeoCalc + GeoAI
 
-GeoCalc — WGS84 koordinatalari bo‘yicha yer maydoni, koordinata formatlari va TIN asosidagi Cut & Fill hajmini hisoblash uchun modern veb-ilova. GeoAI geodeziya savollari, KML/CSV/DXF matn fayllari va rasmdagi koordinatalarni tahlil qilishga yordam beradi.
+GeoCalc — WGS84 koordinatalari bo‘yicha yer maydoni, koordinata formatlari va TIN asosidagi Cut & Fill hajmini hisoblash uchun veb-ilova. GeoAI esa sayt ichidagi universal AI yordamchi: umumiy savollar, matematika, dasturlash, tarjima, matn, rasm/fayl tahlili va geodeziya savollariga javob beradi.
 
-## Asosiy imkoniyatlar
+## GeoAI qanday ishlaydi
 
-- Asl GeoCalc maydon formulalari va UTM zona tanlovi o‘zgartirilmagan.
-- O‘nli gradus ↔ GMS konvertori asl formulalar bilan ishlaydi.
-- Delaunay TIN, chiziqli balandlik interpolatsiyasi va nol konturi bo‘yicha alohida Cut/Fill integratsiyasi.
-- Firebase orqali majburiy Google kirish va har bir foydalanuvchi uchun alohida lokal tarix.
-- KML, CSV, DXF, XYZ va rasmlar uchun GeoAI chat; Google Search, kod orqali hisoblash va GeoCalc funksiyalari.
-- Server tomondagi Gemini API proksi; maxfiy kalit brauzerga yuborilmaydi.
-- Responsiv dizayn, tungi/yorug‘ rejim va mahalliy hisoblash tarixi.
+GeoAI server orqali Gemini Developer API bilan ishlaydi. API kalit brauzerga chiqmaydi.
 
-## Mahalliy ishga tushirish
+- Oddiy va murakkab savollar: bepul Gemini Flash/Flash-Lite modellaridan avtomatik tanlash va fallback.
+- Dolzarb savollar (bugun, hozir, yangilik, narx, ob-havo, current/latest va h.k.): Gemini 2.5 Flash orqali bepul Google Search grounding.
+- Search limiti tugasa: GeoAI butunlay to‘xtamaydi, oddiy modelga fallback qiladi va javob real vaqtda tekshirilmaganini aytadi.
+- Geodezik hisoblar: GeoCalc’ning mavjud maydon, perimetr, DMS va Cut & Fill funksiyalarini function calling orqali chaqiradi.
+- Murakkab hisob va tekshiruv: Gemini code execution vositasidan foydalanishi mumkin.
+- Rasm: JPG/PNG/WebP inline multimodal input sifatida Gemini’ga yuboriladi.
+- KML/CSV/DXF/TXT/XYZ: matn sifatida tahlil qilinadi.
 
-Talab: Node.js 22.13 yoki yangiroq.
+## Vercel’da faqat bitta ENV kerak
 
-```bash
-npm ci
-cp .env.example .env.local
-npm run dev:vercel
-```
+Google AI Studio’dan Gemini API key oling. So‘ng:
 
-`.env.local` ichiga yangi Gemini auth key kiriting:
+**Vercel → GeoCalc project → Settings → Environment Variables → Add New**
 
 ```env
-GEMINI_API_KEY=your_new_key
-GEMINI_MODEL=gemini-3.6-flash
-GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta/interactions
+GEMINI_API_KEY=BU_YERGA_GEMINI_API_KEY
 ```
 
-API kalitiga hech qachon `NEXT_PUBLIC_` prefiksini bermang va `.env.local` faylini Git'ga qo‘shmang. `gemini-1.5-flash` 2025-09-29 dan beri o‘chirilgan; eski environment qiymati qolib ketgan bo‘lsa, GeoAI uni avtomatik `gemini-3.6-flash` ga almashtiradi.
+Environment sifatida **Production**, **Preview** va **Development** ni belgilang. Keyin **Redeploy** qiling.
+
+Muhim:
+
+- `NEXT_PUBLIC_GEMINI_API_KEY` ishlatmang.
+- API key’ni source code ichiga yozmang.
+- Eski `GEMINI_MODEL` va `GEMINI_API_URL` ENV’lari endi kerak emas; xohlasangiz Vercel’dan o‘chirib tashlang. Kod ularni ishlatmaydi.
 
 ## Google orqali kirish
 
-Loyiha avvalgi GeoCalc Firebase loyihasiga (`geocalc-64d8b`) ulangan. Firebase Console ichida:
+Loyiha Firebase project `geocalc-64d8b` bilan ulangan.
 
-1. **Authentication → Sign-in method → Google** provayderini yoqing.
-2. **Authentication → Settings → Authorized domains** bo‘limiga `geocalc.uz`, Vercel domeni va foydalaniladigan boshqa ishlab chiqarish domenlarini qo‘shing.
-3. Firebase web konfiguratsiyasi ommaviy identifikator hisoblanadi; haqiqiy maxfiy Gemini kaliti esa faqat server muhitida qoladi.
+1. Firebase Console → Authentication → Sign-in method → Google yoqilgan bo‘lsin.
+2. Authentication → Settings → Authorized domains ichida `geocalc.uz` va Vercel domeni bo‘lsin.
+3. GeoAI POST endpoint Firebase ID tokenni tekshiradi; login qilmagan foydalanuvchi AI’dan foydalana olmaydi.
 
-GeoAI API har bir so‘rovdagi Firebase ID tokenni serverda tekshiradi. Google orqali kirmagan foydalanuvchi GeoAI endpointdan foydalana olmaydi.
-
-## Vercel deployment
-
-1. Loyihani GitHub repozitoriyasiga yuklang.
-2. Vercel'da **Add New → Project** orqali repozitoriyni tanlang.
-3. Framework preset avtomatik `Next.js` bo‘ladi; `vercel.json` build buyruğini sozlaydi.
-4. **Settings → Environment Variables** ichida `GEMINI_API_KEY` ni Production, Preview va Development uchun kiriting. `GEMINI_MODEL` uchun `gemini-3.6-flash` tavsiya etiladi.
-5. Kerak bo‘lsa `GEMINI_MODEL` va `GEMINI_API_URL` ni ham `.env.example` dagi qiymatlar bilan qo‘shing.
-6. Deploy tugmasini bosing va `geocalc.uz` domenini loyiha domenlariga ulang.
-7. Yangi Vercel domenini Firebase **Authorized domains** ro‘yxatiga ham qo‘shing.
-
-## Tekshiruv
+## Deployment
 
 ```bash
+npm ci
 npm run build:vercel
-npm run lint
 ```
 
-GeoAI endpointda vaqtinchalik tezlik cheklovi, so‘rov hajmi nazorati va server-only API kalit ishlatilgan. `GET /api/geoai` orqali server konfiguratsiyasi tayyorligini tekshirish mumkin; bu endpoint API kalitini oshkor qilmaydi. Ishlab chiqarishda Gemini billing/usage alertlarini ham yoqish tavsiya etiladi.
+Vercel `vercel.json` orqali `npm run build:vercel` ishlatadi.
 
-## Hisoblash metodlari
+Deploydan keyin:
 
-### Maydon
+- `https://geocalc.uz/api/geoai` — konfiguratsiya holatini ko‘rsatadi; bu endpoint Gemini generation qilmaydi.
+- Haqiqiy AI tekshiruvi uchun saytga Google orqali kirib GeoAI chatida `Salom, o‘zingni tanishtir` deb yuboring.
 
-Asl koddagi yo‘l saqlangan: WGS84 nuqtalari o‘rtacha uzunlik bo‘yicha UTM 41/42/43 zonaga proyeksiya qilinadi, so‘ng Shoelace formulasi bilan m² hisoblanadi.
+## GeoCalc matematik logikasi
 
-### Hajm
+GeoCalc’ning mavjud geodezik hisoblash algoritmlari o‘zgartirilmagan:
 
-Nuqtalar Delaunay TIN ga bo‘linadi. Har uchburchakda `loyiha Z − mavjud Z` chiziqli interpolatsiya qilinadi. Belgisi o‘zgaradigan uchburchak nol konturi bo‘yicha kesiladi; musbat va manfiy qismlar alohida integratsiya qilinadi.
+- WGS84 → UTM proyeksiya va Shoelace maydon hisobi.
+- Metric perimeter.
+- O‘nli koordinata ↔ GMS.
+- Delaunay TIN asosidagi Cut & Fill integratsiyasi.
 
-Muhim: qurilish, kadastr yoki huquqiy qaror oldidan natijani sertifikatlangan geodezist bilan tekshiring.
+Qurilish, kadastr yoki huquqiy qaror oldidan natijani professional geodezist bilan tekshirish tavsiya etiladi.

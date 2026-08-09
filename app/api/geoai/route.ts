@@ -30,65 +30,64 @@ type RateState = {
   resetAt: number;
 };
 
-const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_LIMIT = 18;
-const MAX_MESSAGE_LENGTH = 6_000;
-const MAX_TEXT_ATTACHMENT_LENGTH = 350_000;
-const MAX_IMAGE_DATA_LENGTH = 4_200_000;
-const MAX_ATTACHMENTS = 4;
-
-const rateStore = new Map<string, RateState>();
-
-const DEFAULT_GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
-const RETIRED_GEMINI_15_PATTERN = /^(?:models\/)?gemini-1\.5(?:-|$)/i;
-
-function resolveGeminiModel(configuredModel?: string) {
-  const cleaned = (configuredModel || "").trim().replace(/^models\//i, "");
-  if (!cleaned) return DEFAULT_GEMINI_MODEL;
-
-  // Gemini 1.5 endpoints are retired. Keep old deployments working by
-  // transparently moving legacy 1.5 model names to the current stable Flash model.
-  if (RETIRED_GEMINI_15_PATTERN.test(cleaned)) return DEFAULT_GEMINI_MODEL;
-  return cleaned;
-}
-
-function geoAIUpstreamError(status: number, upstreamMessage = "") {
-  const normalized = upstreamMessage.toLowerCase();
-
-  if (status === 401 || status === 403) {
-    return "Gemini API kaliti qabul qilinmadi yoki bu loyiha uchun ruxsat berilmagan. GEMINI_API_KEY ni tekshiring.";
-  }
-
-  if (status === 429) {
-    return "Gemini API limiti tugagan yoki so‘rovlar juda ko‘p. Google AI Studio kvotasi/billing holatini tekshiring.";
-  }
-
-  if (status === 400 || status === 404 || normalized.includes("model")) {
-    return "Tanlangan Gemini modeli mavjud emas yoki bu endpointda ishlamaydi. GEMINI_MODEL ni gemini-3.6-flash ga o‘rnating.";
-  }
-
-  return "GeoAI Gemini xizmatidan javob ololmadi. Server sozlamalari va Gemini API holatini tekshiring.";
-}
+type ContentBlock = {
+  type?: string;
+  text?: string;
+  [key: string]: unknown;
+};
 
 type InteractionStep = {
   type?: string;
   id?: string;
   name?: string;
   arguments?: unknown;
-  content?: Array<{ type?: string; text?: string; [key: string]: unknown }>;
+  content?: ContentBlock[];
   [key: string]: unknown;
 };
 
 type InteractionPayload = {
+  id?: string;
   output_text?: string;
+  status?: string;
   steps?: InteractionStep[];
-  error?: { message?: string };
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
 };
 
-const GEOAI_TOOLS: Array<Record<string, unknown>> = [
-  { type: "google_search" },
-  { type: "code_execution" },
+type GeminiAttempt = {
+  ok: boolean;
+  status: number;
+  payload: InteractionPayload;
+};
+
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT = 30;
+const MAX_MESSAGE_LENGTH = 8_000;
+const MAX_TEXT_ATTACHMENT_LENGTH = 350_000;
+const MAX_IMAGE_DATA_LENGTH = 4_200_000;
+const MAX_ATTACHMENTS = 4;
+const MAX_HISTORY_ITEMS = 10;
+const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions";
+
+// These models currently have a Gemini Developer API Free Tier. The app does not
+// depend on GEMINI_MODEL/GEMINI_API_URL env vars so an old Vercel value cannot
+// accidentally force GeoAI back onto a retired or paid-only configuration.
+const GENERAL_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-lite",
+] as const;
+
+// Gemini 2.5 Flash/Flash-Lite currently include a free Google Search grounding
+// allowance. Search is only enabled for queries that actually need live data.
+const SEARCH_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+
+const rateStore = new Map<string, RateState>();
+
+const GEOAI_FUNCTION_TOOLS: Array<Record<string, unknown>> = [
   {
     type: "function",
     name: "calculate_land_area",
@@ -162,6 +161,11 @@ const GEOAI_TOOLS: Array<Record<string, unknown>> = [
   },
 ];
 
+const GENERAL_TOOLS: Array<Record<string, unknown>> = [
+  { type: "code_execution" },
+  ...GEOAI_FUNCTION_TOOLS,
+];
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -222,7 +226,7 @@ function executeGeoCalcFunction(name: string, rawArguments: unknown) {
       const minutes = requiredNumber(args, "minutes");
       const seconds = requiredNumber(args, "seconds");
       const hemisphere = requiredString(args, "hemisphere").toUpperCase();
-      if (!(["N", "S", "E", "W"] as string[]).includes(hemisphere)) {
+      if (!( ["N", "S", "E", "W"] as string[]).includes(hemisphere)) {
         throw new Error("hemisphere N, S, E yoki W bo'lishi kerak.");
       }
       const decimal = fromDMS(
@@ -321,17 +325,14 @@ function isSafeAttachment(value: unknown): value is GeoAIAttachment {
   return false;
 }
 
-function extractOutput(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "";
-  const response = payload as InteractionPayload;
-
-  if (typeof response.output_text === "string") {
-    return response.output_text.trim();
+function extractOutput(payload: InteractionPayload) {
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
   }
 
-  if (!Array.isArray(response.steps)) return "";
+  if (!Array.isArray(payload.steps)) return "";
 
-  return response.steps
+  return payload.steps
     .filter((step) => step?.type === "model_output" && Array.isArray(step.content))
     .flatMap((step) => step.content ?? [])
     .filter((block) => block?.type === "text" && typeof block.text === "string")
@@ -342,32 +343,317 @@ function extractOutput(payload: unknown) {
 }
 
 function withMandatoryContact(answer: string) {
-  const marker =
-    "Xizmat, murojaat, shikoyat, qonunbuzarliklar va takliflar uchun";
+  const marker = GEOAI_CONTACT_TEXT.split("\n")[0];
   const markerIndex = answer.indexOf(marker);
   const body = (markerIndex >= 0 ? answer.slice(0, markerIndex) : answer).trim();
-  return `${body || "Savolingiz bo‘yicha aniq javob tayyor bo‘lmadi. Iltimos, ma’lumotni boshqacha yozib ko‘ring."}\n\n${GEOAI_CONTACT_TEXT}`;
+  const safeBody =
+    body || "Savolingiz bo‘yicha javob tayyor bo‘lmadi. Iltimos, so‘rovni qayta yuboring.";
+  return `${safeBody}\n\n${GEOAI_CONTACT_TEXT}`;
+}
+
+function stripContact(content: string) {
+  const marker = GEOAI_CONTACT_TEXT.split("\n")[0];
+  const markerIndex = content.indexOf(marker);
+  return (markerIndex >= 0 ? content.slice(0, markerIndex) : content).trim();
+}
+
+function shouldUseLiveSearch(message: string) {
+  if (!message.trim()) return false;
+
+  const normalized = message.toLocaleLowerCase("uz");
+  const explicitSearch =
+    /(internet|web|google|qidir|qidiring|izla|izlang|search|поиск|найди|найдите|интернет)/i;
+  const currentInfo =
+    /(bugun|hozir|hozirgi|ayni payt|eng so['’‘`]?nggi|so['’‘`]?nggi|yangilik|yangiliklar|ob[- ]?havo|valyuta|dollar kurs|kursi|narx|reyting|prezident|bosh vazir|ceo|rahbari|o['’‘`]?yin natijasi|today|now|current|latest|recent|news|weather|price|exchange rate|score|standings|president|prime minister|сегодня|сейчас|текущ|последн|свеж|новост|погод|цена|курс|президент|премьер)/i;
+  const directUrl = /https?:\/\//i;
+
+  return explicitSearch.test(normalized) || currentInfo.test(normalized) || directUrl.test(message);
+}
+
+function looksComplex(message: string, attachments: GeoAIAttachment[]) {
+  if (attachments.length > 0 || message.length > 500) return true;
+  return /(kod|code|dastur|program|debug|xato|error|tahlil|analysis|matemat|formula|hisobla|calculate|geodez|utm|wgs|kml|dxf|cut|fill|koordinat|coordinate|translate|tarjima|essay|maqola|hujjat|document)/i.test(
+    message,
+  );
+}
+
+function modelOrder(message: string, attachments: GeoAIAttachment[]) {
+  if (looksComplex(message, attachments)) return [...GENERAL_MODELS];
+  return [GENERAL_MODELS[1], GENERAL_MODELS[0], GENERAL_MODELS[2]];
+}
+
+function buildHistory(history: ChatMessage[]) {
+  return history
+    .filter(
+      (item): item is ChatMessage =>
+        Boolean(
+          item &&
+            (item.role === "user" || item.role === "assistant") &&
+            typeof item.content === "string",
+        ),
+    )
+    .slice(-MAX_HISTORY_ITEMS)
+    .map((item) => {
+      const content = stripContact(item.content).slice(0, 4_000);
+      return `${item.role === "user" ? "Foydalanuvchi" : "GeoAI"}: ${content}`;
+    })
+    .join("\n\n");
+}
+
+function buildInputItems(
+  message: string,
+  history: ChatMessage[],
+  attachments: GeoAIAttachment[],
+) {
+  const historyText = buildHistory(history);
+  const inputItems: Array<{ type: string; [key: string]: unknown }> = [
+    {
+      type: "text",
+      text: `Oldingi suhbat:\n${historyText || "Yangi suhbat."}\n\nFoydalanuvchining yangi so‘rovi:\n${message || "Biriktirilgan faylni tahlil qiling."}`,
+    },
+  ];
+
+  for (const attachment of attachments) {
+    if (attachment.kind === "image") {
+      inputItems.push({
+        type: "image",
+        mime_type: attachment.mimeType,
+        data: attachment.data,
+      });
+    } else {
+      inputItems.push({
+        type: "text",
+        text: `\n--- ${attachment.name} (${attachment.mimeType}) fayli boshlandi ---\n${attachment.content}\n--- ${attachment.name} fayli tugadi ---`,
+      });
+    }
+  }
+
+  return inputItems;
+}
+
+async function callGemini(
+  apiKey: string,
+  body: Record<string, unknown>,
+  timeoutMs = 55_000,
+): Promise<GeminiAttempt> {
+  try {
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+
+    let payload: InteractionPayload = {};
+    try {
+      payload = (await response.json()) as InteractionPayload;
+    } catch {
+      payload = {};
+    }
+
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    console.error("GeoAI Gemini network error", error);
+    return {
+      ok: false,
+      status: 504,
+      payload: { error: { message: "Gemini bilan tarmoq aloqasi uzildi." } },
+    };
+  }
+}
+
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function functionCalls(payload: InteractionPayload) {
+  return (Array.isArray(payload.steps) ? payload.steps : []).filter(
+    (step) =>
+      step.type === "function_call" &&
+      typeof step.id === "string" &&
+      typeof step.name === "string",
+  );
+}
+
+async function runGeneralModel(
+  apiKey: string,
+  model: string,
+  inputItems: Array<{ type: string; [key: string]: unknown }>,
+) {
+  // Gemini 3.x can combine built-in tools with custom function calling. For the
+  // 2.5 fallback we keep only GeoCalc functions to avoid an unsupported mixed-
+  // tool request while still preserving all core geodetic calculations.
+  const tools = model.startsWith("gemini-2.5") ? GEOAI_FUNCTION_TOOLS : GENERAL_TOOLS;
+
+  const initial = await callGemini(apiKey, {
+    model,
+    system_instruction: GEOAI_SYSTEM_PROMPT,
+    input: inputItems,
+    tools,
+    store: true,
+    generation_config: {
+      max_output_tokens: 6_144,
+      tool_choice: "auto",
+    },
+  });
+
+  if (!initial.ok) return { ...initial, answer: "" };
+
+  let payload = initial.payload;
+  let answer = extractOutput(payload);
+
+  for (let round = 0; round < 4; round += 1) {
+    const calls = functionCalls(payload);
+    if (!calls.length) {
+      return { ok: true, status: 200, payload, answer };
+    }
+
+    if (!payload.id) {
+      return {
+        ok: false,
+        status: 502,
+        payload: { error: { message: "Gemini function-call interaction ID qaytarmadi." } },
+        answer: "",
+      };
+    }
+
+    const results = calls.map((step) => ({
+      type: "function_result",
+      name: step.name,
+      call_id: step.id,
+      result: [
+        {
+          type: "text",
+          text: JSON.stringify(executeGeoCalcFunction(step.name as string, step.arguments)),
+        },
+      ],
+    }));
+
+    const continuation = await callGemini(apiKey, {
+      model,
+      previous_interaction_id: payload.id,
+      system_instruction: GEOAI_SYSTEM_PROMPT,
+      input: results,
+      tools,
+      store: true,
+      generation_config: {
+        max_output_tokens: 6_144,
+        tool_choice: "auto",
+      },
+    });
+
+    if (!continuation.ok) return { ...continuation, answer: "" };
+
+    payload = continuation.payload;
+    answer = extractOutput(payload) || answer;
+  }
+
+  return { ok: true, status: 200, payload, answer };
+}
+
+async function runGeneral(
+  apiKey: string,
+  inputItems: Array<{ type: string; [key: string]: unknown }>,
+  message: string,
+  attachments: GeoAIAttachment[],
+) {
+  let lastFailure: GeminiAttempt | null = null;
+
+  for (const model of modelOrder(message, attachments)) {
+    const result = await runGeneralModel(apiKey, model, inputItems);
+    if (result.ok && result.answer.trim()) {
+      return { answer: result.answer.trim(), model };
+    }
+
+    lastFailure = result;
+    console.warn(
+      "GeoAI model failed",
+      model,
+      result.status,
+      result.payload.error?.message || "empty answer",
+    );
+
+    if (!isRetryableStatus(result.status) && result.status !== 400 && result.status !== 404) {
+      break;
+    }
+  }
+
+  return { answer: "", model: "", failure: lastFailure };
+}
+
+async function runLiveSearch(
+  apiKey: string,
+  inputItems: Array<{ type: string; [key: string]: unknown }>,
+) {
+  let lastFailure: GeminiAttempt | null = null;
+
+  for (const model of SEARCH_MODELS) {
+    const result = await callGemini(apiKey, {
+      model,
+      system_instruction: `${GEOAI_SYSTEM_PROMPT}\n\nBu so‘rov dolzarb ma’lumot talab qiladi. Google Search vositasidan foydalanib, topilgan eng yangi ma’lumotni tekshirib javob bering. Qidiruv natijasida aniq sana bo‘lsa, sanani ko‘rsating.`,
+      input: inputItems,
+      tools: [{ type: "google_search" }],
+      store: false,
+      generation_config: {
+        max_output_tokens: 6_144,
+      },
+    });
+
+    const answer = result.ok ? extractOutput(result.payload) : "";
+    if (result.ok && answer.trim()) {
+      return { answer: answer.trim(), model };
+    }
+
+    lastFailure = result;
+    console.warn(
+      "GeoAI search model failed",
+      model,
+      result.status,
+      result.payload.error?.message || "empty answer",
+    );
+
+    if (!isRetryableStatus(result.status) && result.status !== 400 && result.status !== 404) {
+      break;
+    }
+  }
+
+  return { answer: "", model: "", failure: lastFailure };
+}
+
+function upstreamError(status: number, message?: string) {
+  if (status === 401 || status === 403) {
+    return "Gemini API kaliti yaroqsiz yoki ushbu Google AI Studio loyihasida ruxsat berilmagan. Vercel’dagi GEMINI_API_KEY ni tekshiring.";
+  }
+  if (status === 429) {
+    return "Bepul Gemini API limiti hozircha tugagan. Limit tiklangach GeoAI avtomatik yana ishlaydi.";
+  }
+  if (status === 400 || status === 404) {
+    return "Gemini modeli yoki so‘rov formati Google tomonidan qabul qilinmadi. GeoAI konfiguratsiyasini yangilash kerak.";
+  }
+  if (status >= 500) {
+    return "Gemini xizmati vaqtincha javob bermayapti. Birozdan so‘ng qayta urinib ko‘ring.";
+  }
+  return message || "GeoAI xizmati vaqtincha javob bermadi.";
 }
 
 export async function GET() {
-  const configuredModel = process.env.GEMINI_MODEL;
-  const model = resolveGeminiModel(configuredModel);
-  const configured = Boolean(process.env.GEMINI_API_KEY);
-
   return NextResponse.json(
     {
-      ok: configured,
-      configured,
-      model,
-      legacyModelMigrated: Boolean(
-        configuredModel && RETIRED_GEMINI_15_PATTERN.test(configuredModel.trim()),
-      ),
+      ok: true,
+      configured: Boolean(process.env.GEMINI_API_KEY),
+      provider: "Gemini Developer API",
+      generalModels: GENERAL_MODELS,
+      searchModels: SEARCH_MODELS,
+      liveSearch: "automatic-for-current-questions",
+      googleSearchFreeMode: true,
       authRequired: true,
+      note: "GET faqat konfiguratsiyani ko‘rsatadi; haqiqiy Gemini javobi GeoAI chatdagi POST so‘rovida tekshiriladi.",
     },
-    {
-      status: configured ? 200 : 503,
-      headers: { "Cache-Control": "no-store" },
-    },
+    { headers: { "Cache-Control": "no-store" } },
   );
 }
 
@@ -387,10 +673,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
-      { error: "GeoAI server kaliti sozlanmagan. Vercel → Settings → Environment Variables ichida GEMINI_API_KEY ni qo‘shing va loyihani Redeploy qiling." },
+      {
+        error:
+          "GeoAI server kaliti sozlanmagan. Vercel → Project → Settings → Environment Variables ichiga GEMINI_API_KEY qo‘shing va Redeploy qiling.",
+      },
       { status: 503 },
     );
   }
@@ -422,121 +711,62 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const history = (Array.isArray(body.history) ? body.history : [])
-    .filter(
-      (item): item is ChatMessage =>
-        Boolean(
-          item &&
-            (item.role === "user" || item.role === "assistant") &&
-            typeof item.content === "string",
-        ),
-    )
-    .slice(-8)
-    .map((item) => {
-      const contactIndex = item.content.indexOf(GEOAI_CONTACT_TEXT.split("\n")[0]);
-      const content = contactIndex >= 0 ? item.content.slice(0, contactIndex) : item.content;
-      return `${item.role === "user" ? "Foydalanuvchi" : "GeoAI"}: ${content.slice(0, 4_000)}`;
-    })
-    .join("\n\n");
-
-  const inputItems: Array<{ type: string; [key: string]: unknown }> = [
-    {
-      type: "text",
-      text: `Oldingi suhbat:\n${history || "Yangi suhbat."}\n\nFoydalanuvchining yangi so‘rovi:\n${message || "Biriktirilgan faylni tahlil qiling."}`,
-    },
-  ];
-
-  for (const attachment of attachments) {
-    if (attachment.kind === "image") {
-      inputItems.push({
-        type: "image",
-        mime_type: attachment.mimeType,
-        data: attachment.data,
-      });
-    } else {
-      inputItems.push({
-        type: "text",
-        text: `\n--- ${attachment.name} (${attachment.mimeType}) fayli boshlandi ---\n${attachment.content}\n--- ${attachment.name} fayli tugadi ---`,
-      });
-    }
-  }
-
-  const endpoint = process.env.GEMINI_API_URL || DEFAULT_GEMINI_API_URL;
-  const configuredModel = process.env.GEMINI_MODEL;
-  const model = resolveGeminiModel(configuredModel);
-
-  if (configuredModel && RETIRED_GEMINI_15_PATTERN.test(configuredModel.trim())) {
-    console.warn(
-      `GeoAI: ${configuredModel} is retired; using ${model} instead. Update GEMINI_MODEL in deployment settings.`,
-    );
-  }
+  const history = Array.isArray(body.history) ? body.history : [];
+  const inputItems = buildInputItems(message, history, attachments);
+  const wantsLiveSearch = shouldUseLiveSearch(message);
 
   try {
-    let interactionInput: InteractionStep[] = [
-      { type: "user_input", content: inputItems },
-    ];
-    let answer = "";
-
-    for (let round = 0; round < 4; round += 1) {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          model,
-          system_instruction: GEOAI_SYSTEM_PROMPT,
-          input: interactionInput,
-          tools: GEOAI_TOOLS,
-          store: false,
-        }),
-        signal: AbortSignal.timeout(55_000),
-      });
-
-      const payload = (await response.json()) as InteractionPayload;
-      if (!response.ok) {
-        const upstreamMessage = payload.error?.message || "";
-        console.error("GeoAI upstream error", response.status, upstreamMessage);
+    if (wantsLiveSearch) {
+      const searched = await runLiveSearch(apiKey, inputItems);
+      if (searched.answer) {
         return NextResponse.json(
-          { error: geoAIUpstreamError(response.status, upstreamMessage) },
-          { status: response.status === 429 ? 429 : 502 },
+          {
+            answer: withMandatoryContact(searched.answer),
+            mode: "live-search",
+          },
+          { headers: { "Cache-Control": "no-store" } },
         );
       }
 
-      answer = extractOutput(payload) || answer;
-      const steps = Array.isArray(payload.steps) ? payload.steps : [];
-      const functionCalls = steps.filter(
-        (step) =>
-          step.type === "function_call" &&
-          typeof step.id === "string" &&
-          typeof step.name === "string",
-      );
-
-      if (!functionCalls.length) break;
-
-      const functionResults: InteractionStep[] = functionCalls.map((step) => ({
-        type: "function_result",
-        name: step.name,
-        call_id: step.id,
-        result: [
+      // Search grounding has its own free quota. If it is unavailable, do not make
+      // GeoAI useless: fall back to ordinary free Gemini and clearly mark that the
+      // answer could not be live-verified.
+      const fallback = await runGeneral(apiKey, inputItems, message, attachments);
+      if (fallback.answer) {
+        return NextResponse.json(
           {
-            type: "text",
-            text: JSON.stringify(executeGeoCalcFunction(step.name as string, step.arguments)),
+            answer: withMandatoryContact(
+              `Eslatma: jonli Google qidiruvi limiti hozir mavjud emas, shuning uchun quyidagi javob real vaqtda tekshirilmagan.\n\n${fallback.answer}`,
+            ),
+            mode: "general-fallback",
           },
-        ],
-      }));
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      }
 
-      interactionInput = [...interactionInput, ...steps, ...functionResults];
+      const failure = fallback.failure || searched.failure;
+      const status = failure?.status || 502;
+      return NextResponse.json(
+        { error: upstreamError(status, failure?.payload.error?.message) },
+        { status: status === 429 ? 429 : 502 },
+      );
     }
 
-    return NextResponse.json(
-      { answer: withMandatoryContact(answer) },
-      {
-        headers: {
-          "Cache-Control": "no-store",
+    const result = await runGeneral(apiKey, inputItems, message, attachments);
+    if (result.answer) {
+      return NextResponse.json(
+        {
+          answer: withMandatoryContact(result.answer),
+          mode: "general",
         },
-      },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    const status = result.failure?.status || 502;
+    return NextResponse.json(
+      { error: upstreamError(status, result.failure?.payload.error?.message) },
+      { status: status === 429 ? 429 : 502 },
     );
   } catch (error) {
     console.error("GeoAI request failed", error);

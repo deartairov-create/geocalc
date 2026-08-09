@@ -2757,3 +2757,12 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Language selector: localization-only UI addition. */
+.language-switcher {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.auth-panel > .language-switcher {
+  margin-top: 18px;
+}

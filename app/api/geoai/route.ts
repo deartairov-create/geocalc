@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  GEOAI_CONTACT_MARKERS,
   GEOAI_CONTACT_TEXT,
+  GEOAI_CONTACT_TEXT_EN,
+  GEOAI_CONTACT_TEXT_RU,
   GEOAI_SYSTEM_PROMPT,
   type GeoAIAttachment,
 } from "@/lib/geoai";
@@ -19,10 +22,13 @@ type ChatMessage = {
   content: string;
 };
 
+type AppLanguage = "uz" | "ru" | "en";
+
 type ChatRequest = {
   message?: string;
   history?: ChatMessage[];
   attachments?: GeoAIAttachment[];
+  language?: AppLanguage;
 };
 
 type RateState = {
@@ -342,25 +348,69 @@ function extractOutput(payload: InteractionPayload) {
     .trim();
 }
 
-function withMandatoryContact(answer: string) {
-  const marker = GEOAI_CONTACT_TEXT.split("\n")[0];
-  const markerIndex = answer.indexOf(marker);
-  const body = (markerIndex >= 0 ? answer.slice(0, markerIndex) : answer).trim();
-  const safeBody =
-    body || "Savolingiz bo‘yicha javob tayyor bo‘lmadi. Iltimos, so‘rovni qayta yuboring.";
-  return `${safeBody}\n\n${GEOAI_CONTACT_TEXT}`;
+function stripContact(content: string) {
+  let clean = content;
+  for (const marker of GEOAI_CONTACT_MARKERS) {
+    const markerIndex = clean.indexOf(marker);
+    if (markerIndex >= 0) clean = clean.slice(0, markerIndex);
+  }
+  return clean.trim();
 }
 
-function stripContact(content: string) {
-  const marker = GEOAI_CONTACT_TEXT.split("\n")[0];
-  const markerIndex = content.indexOf(marker);
-  return (markerIndex >= 0 ? content.slice(0, markerIndex) : content).trim();
+function detectMessageLanguage(message: string): AppLanguage {
+  const value = message.trim();
+  if (/[А-Яа-яЁё]/.test(value)) return "ru";
+
+  const lower = value.toLocaleLowerCase();
+  const uzScore = [
+    /\b(salom|assalomu|men|sen|siz|biz|bu|shu|uchun|bilan|kerak|qanday|nima|nega|qayer|qachon|haqida|yoz|qil|ber|ayt|hisob|koordinat|maydon|o['’‘`]?zbek)\b/i,
+    /[o‘g‘]/i,
+  ].reduce((score, pattern) => score + (pattern.test(lower) ? 1 : 0), 0);
+  const enScore = [
+    /\b(hello|hi|hey|the|and|what|how|why|where|when|please|can|could|would|is|are|write|explain|calculate|convert|english)\b/i,
+  ].reduce((score, pattern) => score + (pattern.test(lower) ? 1 : 0), 0);
+
+  return enScore > uzScore ? "en" : "uz";
+}
+
+function requestLanguage(request: NextRequest, bodyLanguage?: unknown, message = ""): AppLanguage {
+  if (message.trim()) return detectMessageLanguage(message);
+  if (bodyLanguage === "ru" || bodyLanguage === "en" || bodyLanguage === "uz") return bodyLanguage;
+  const header = request.headers.get("x-geocalc-language");
+  if (header === "ru" || header === "en" || header === "uz") return header;
+  const accept = request.headers.get("accept-language")?.toLowerCase() || "";
+  if (accept.startsWith("ru")) return "ru";
+  if (accept.startsWith("en")) return "en";
+  return "uz";
+}
+
+function localize(language: AppLanguage, uz: string, ru: string, en: string) {
+  return language === "ru" ? ru : language === "en" ? en : uz;
+}
+
+function contactText(language: AppLanguage) {
+  return language === "ru"
+    ? GEOAI_CONTACT_TEXT_RU
+    : language === "en"
+      ? GEOAI_CONTACT_TEXT_EN
+      : GEOAI_CONTACT_TEXT;
+}
+
+function withMandatoryContact(answer: string, language: AppLanguage) {
+  const body = stripContact(answer);
+  const safeBody = body || localize(
+    language,
+    "Savolingiz bo‘yicha javob tayyor bo‘lmadi. Iltimos, so‘rovni qayta yuboring.",
+    "Не удалось подготовить ответ на ваш вопрос. Пожалуйста, отправьте запрос ещё раз.",
+    "A response could not be prepared for your question. Please send the request again.",
+  );
+  return `${safeBody}\n\n${contactText(language)}`;
 }
 
 function shouldUseLiveSearch(message: string) {
   if (!message.trim()) return false;
 
-  const normalized = message.toLocaleLowerCase("uz");
+  const normalized = message.toLocaleLowerCase();
   const explicitSearch =
     /(internet|web|google|qidir|qidiring|izla|izlang|search|поиск|найди|найдите|интернет)/i;
   const currentInfo =
@@ -372,7 +422,7 @@ function shouldUseLiveSearch(message: string) {
 
 function looksComplex(message: string, attachments: GeoAIAttachment[]) {
   if (attachments.length > 0 || message.length > 500) return true;
-  return /(kod|code|dastur|program|debug|xato|error|tahlil|analysis|matemat|formula|hisobla|calculate|geodez|utm|wgs|kml|dxf|cut|fill|koordinat|coordinate|translate|tarjima|essay|maqola|hujjat|document)/i.test(
+  return /(kod|code|dastur|program|debug|xato|error|tahlil|analysis|matemat|formula|hisobla|calculate|geodez|utm|wgs|kml|dxf|cut|fill|koordinat|coordinate|translate|tarjima|essay|maqola|hujjat|document|код|программ|ошиб|анализ|математ|формул|рассчит|геодез|координат|перевод|стать|документ)/i.test(
     message,
   );
 }
@@ -395,7 +445,7 @@ function buildHistory(history: ChatMessage[]) {
     .slice(-MAX_HISTORY_ITEMS)
     .map((item) => {
       const content = stripContact(item.content).slice(0, 4_000);
-      return `${item.role === "user" ? "Foydalanuvchi" : "GeoAI"}: ${content}`;
+      return `${item.role === "user" ? "User" : "GeoAI"}: ${content}`;
     })
     .join("\n\n");
 }
@@ -624,20 +674,35 @@ async function runLiveSearch(
   return { answer: "", model: "", failure: lastFailure };
 }
 
-function upstreamError(status: number, message?: string) {
+function upstreamError(status: number, language: AppLanguage, message?: string) {
   if (status === 401 || status === 403) {
-    return "Gemini API kaliti yaroqsiz yoki ushbu Google AI Studio loyihasida ruxsat berilmagan. Vercel’dagi GEMINI_API_KEY ni tekshiring.";
+    return localize(language,
+      "Gemini API kaliti yaroqsiz yoki ushbu Google AI Studio loyihasida ruxsat berilmagan. Vercel’dagi GEMINI_API_KEY ni tekshiring.",
+      "Ключ Gemini API недействителен или не разрешён для этого проекта Google AI Studio. Проверьте GEMINI_API_KEY в Vercel.",
+      "The Gemini API key is invalid or not allowed for this Google AI Studio project. Check GEMINI_API_KEY in Vercel.");
   }
   if (status === 429) {
-    return "Bepul Gemini API limiti hozircha tugagan. Limit tiklangach GeoAI avtomatik yana ishlaydi.";
+    return localize(language,
+      "Bepul Gemini API limiti hozircha tugagan. Limit tiklangach GeoAI avtomatik yana ishlaydi.",
+      "Бесплатный лимит Gemini API временно исчерпан. GeoAI снова заработает автоматически после восстановления лимита.",
+      "The free Gemini API quota is temporarily exhausted. GeoAI will work again automatically when the quota resets.");
   }
   if (status === 400 || status === 404) {
-    return "Gemini modeli yoki so‘rov formati Google tomonidan qabul qilinmadi. GeoAI konfiguratsiyasini yangilash kerak.";
+    return localize(language,
+      "Gemini modeli yoki so‘rov formati Google tomonidan qabul qilinmadi. GeoAI konfiguratsiyasini yangilash kerak.",
+      "Модель Gemini или формат запроса не принят Google. Необходимо обновить конфигурацию GeoAI.",
+      "Google rejected the Gemini model or request format. The GeoAI configuration needs to be updated.");
   }
   if (status >= 500) {
-    return "Gemini xizmati vaqtincha javob bermayapti. Birozdan so‘ng qayta urinib ko‘ring.";
+    return localize(language,
+      "Gemini xizmati vaqtincha javob bermayapti. Birozdan so‘ng qayta urinib ko‘ring.",
+      "Сервис Gemini временно не отвечает. Попробуйте ещё раз немного позже.",
+      "Gemini is temporarily unavailable. Please try again shortly.");
   }
-  return message || "GeoAI xizmati vaqtincha javob bermadi.";
+  return message || localize(language,
+    "GeoAI xizmati vaqtincha javob bermadi.",
+    "Сервис GeoAI временно не ответил.",
+    "GeoAI did not respond temporarily.");
 }
 
 export async function GET() {
@@ -658,17 +723,18 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const headerLanguage = requestLanguage(request);
   const currentUser = await verifyGeoCalcUser(request);
   if (!currentUser) {
     return NextResponse.json(
-      { error: "GeoAI dan foydalanish uchun Google orqali kiring." },
+      { error: localize(headerLanguage, "GeoAI dan foydalanish uchun Google orqali kiring.", "Чтобы пользоваться GeoAI, войдите через Google.", "Sign in with Google to use GeoAI.") },
       { status: 401 },
     );
   }
 
   if (isRateLimited(`${currentUser.uid}:${clientKey(request)}`)) {
     return NextResponse.json(
-      { error: "So‘rovlar juda tez yuborildi. Bir necha daqiqadan so‘ng qayta urinib ko‘ring." },
+      { error: localize(headerLanguage, "So‘rovlar juda tez yuborildi. Bir necha daqiqadan so‘ng qayta urinib ko‘ring.", "Запросы отправляются слишком часто. Повторите попытку через несколько минут.", "Requests are being sent too quickly. Try again in a few minutes.") },
       { status: 429 },
     );
   }
@@ -677,8 +743,10 @@ export async function POST(request: NextRequest) {
   if (!apiKey) {
     return NextResponse.json(
       {
-        error:
+        error: localize(headerLanguage,
           "GeoAI server kaliti sozlanmagan. Vercel → Project → Settings → Environment Variables ichiga GEMINI_API_KEY qo‘shing va Redeploy qiling.",
+          "Серверный ключ GeoAI не настроен. Добавьте GEMINI_API_KEY в Vercel → Project → Settings → Environment Variables и выполните Redeploy.",
+          "The GeoAI server key is not configured. Add GEMINI_API_KEY in Vercel → Project → Settings → Environment Variables and redeploy."),
       },
       { status: 503 },
     );
@@ -688,15 +756,16 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as ChatRequest;
   } catch {
-    return NextResponse.json({ error: "So‘rov formati noto‘g‘ri." }, { status: 400 });
+    return NextResponse.json({ error: localize(headerLanguage, "So‘rov formati noto‘g‘ri.", "Неверный формат запроса.", "Invalid request format.") }, { status: 400 });
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
+  const language = requestLanguage(request, body.language, message);
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
 
   if ((!message && !attachments.length) || message.length > MAX_MESSAGE_LENGTH) {
     return NextResponse.json(
-      { error: "Xabar bo‘sh yoki ruxsat etilgan hajmdan katta." },
+      { error: localize(language, "Xabar bo‘sh yoki ruxsat etilgan hajmdan katta.", "Сообщение пустое или превышает допустимый размер.", "The message is empty or exceeds the allowed size.") },
       { status: 400 },
     );
   }
@@ -706,7 +775,7 @@ export async function POST(request: NextRequest) {
     attachments.some((attachment) => !isSafeAttachment(attachment))
   ) {
     return NextResponse.json(
-      { error: "Fayl turi yoki hajmi qo‘llab-quvvatlanmaydi." },
+      { error: localize(language, "Fayl turi yoki hajmi qo‘llab-quvvatlanmaydi.", "Тип или размер файла не поддерживается.", "The file type or size is not supported.") },
       { status: 400 },
     );
   }
@@ -721,7 +790,7 @@ export async function POST(request: NextRequest) {
       if (searched.answer) {
         return NextResponse.json(
           {
-            answer: withMandatoryContact(searched.answer),
+            answer: withMandatoryContact(searched.answer, language),
             mode: "live-search",
           },
           { headers: { "Cache-Control": "no-store" } },
@@ -735,9 +804,11 @@ export async function POST(request: NextRequest) {
       if (fallback.answer) {
         return NextResponse.json(
           {
-            answer: withMandatoryContact(
-              `Eslatma: jonli Google qidiruvi limiti hozir mavjud emas, shuning uchun quyidagi javob real vaqtda tekshirilmagan.\n\n${fallback.answer}`,
-            ),
+            answer: withMandatoryContact(`${localize(language,
+              "Eslatma: jonli Google qidiruvi limiti hozir mavjud emas, shuning uchun quyidagi javob real vaqtda tekshirilmagan.",
+              "Примечание: лимит живого поиска Google сейчас недоступен, поэтому следующий ответ не проверен в реальном времени.",
+              "Note: live Google Search quota is currently unavailable, so the following answer was not verified in real time."
+            )}\n\n${fallback.answer}`, language),
             mode: "general-fallback",
           },
           { headers: { "Cache-Control": "no-store" } },
@@ -747,7 +818,7 @@ export async function POST(request: NextRequest) {
       const failure = fallback.failure || searched.failure;
       const status = failure?.status || 502;
       return NextResponse.json(
-        { error: upstreamError(status, failure?.payload.error?.message) },
+        { error: upstreamError(status, language, failure?.payload.error?.message) },
         { status: status === 429 ? 429 : 502 },
       );
     }
@@ -756,7 +827,7 @@ export async function POST(request: NextRequest) {
     if (result.answer) {
       return NextResponse.json(
         {
-          answer: withMandatoryContact(result.answer),
+          answer: withMandatoryContact(result.answer, language),
           mode: "general",
         },
         { headers: { "Cache-Control": "no-store" } },
@@ -765,13 +836,13 @@ export async function POST(request: NextRequest) {
 
     const status = result.failure?.status || 502;
     return NextResponse.json(
-      { error: upstreamError(status, result.failure?.payload.error?.message) },
+      { error: upstreamError(status, language, result.failure?.payload.error?.message) },
       { status: status === 429 ? 429 : 502 },
     );
   } catch (error) {
     console.error("GeoAI request failed", error);
     return NextResponse.json(
-      { error: "GeoAI bilan bog‘lanishda vaqtinchalik xato yuz berdi." },
+      { error: localize(language, "GeoAI bilan bog‘lanishda vaqtinchalik xato yuz berdi.", "Произошла временная ошибка при подключении к GeoAI.", "A temporary error occurred while connecting to GeoAI.") },
       { status: 504 },
     );
   }

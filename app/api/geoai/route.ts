@@ -14,7 +14,7 @@ import {
 import { calculateCutFill, parseVolumeRows } from "@/lib/volume";
 import { verifyGeoCalcUser } from "@/lib/firebase-server";
 
-// Vercel serverless timeout cheklovini 60 soniyaga uzaytirish
+// Vercel serverless function taym-autini 60 soniyaga uzaytirish
 export const maxDuration = 60;
 
 type ChatMessage = {
@@ -49,12 +49,6 @@ type InteractionStep = {
   arguments?: unknown;
   content?: Array<{ type?: string; text?: string; [key: string]: unknown }>;
   [key: string]: unknown;
-};
-
-type InteractionPayload = {
-  output_text?: string;
-  steps?: InteractionStep[];
-  error?: { message?: string };
 };
 
 const GEOAI_TOOLS: Array<Record<string, unknown>> = [
@@ -292,32 +286,41 @@ function isSafeAttachment(value: unknown): value is GeoAIAttachment {
   return false;
 }
 
-function extractOutput(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "";
-  const response = payload as InteractionPayload;
-
-  if (typeof response.output_text === "string") {
-    return response.output_text.trim();
+function extractOutput(payload: Record<string, unknown>): string {
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
   }
 
-  if (!Array.isArray(response.steps)) return "";
-
-  return response.steps
+  const steps = Array.isArray(payload.steps) ? (payload.steps as InteractionStep[]) : [];
+  const textOutput = steps
     .filter((step) => step?.type === "model_output" && Array.isArray(step.content))
     .flatMap((step) => step.content ?? [])
     .filter((block) => block?.type === "text" && typeof block.text === "string")
     .map((block) => String(block.text).trim())
     .filter(Boolean)
-    .join("\n\n")
-    .trim();
+    .join("\n\n");
+
+  return textOutput.trim();
 }
 
 function withMandatoryContact(answer: string) {
-  const marker =
-    "Xizmat, murojaat, shikoyat, qonunbuzarliklar va takliflar uchun";
+  const marker = "Xizmat, murojaat, shikoyat, qonunbuzarliklar va takliflar uchun";
   const markerIndex = answer.indexOf(marker);
   const body = (markerIndex >= 0 ? answer.slice(0, markerIndex) : answer).trim();
   return `${body || "Savolingiz bo‘yicha aniq javob tayyor bo‘lmadi. Iltimos, ma’lumotni boshqacha yozib ko‘ring."}\n\n${GEOAI_CONTACT_TEXT}`;
+}
+
+function extractErrorMessage(payload: unknown, status: number): string {
+  if (!payload) return `Upstream HTTP ${status} xatosi`;
+  if (typeof payload === "string") return payload;
+
+  const res = payload as Record<string, unknown>;
+  if (typeof res.error === "string") return res.error;
+  if (res.error && typeof res.error === "object") {
+    const errObj = res.error as Record<string, unknown>;
+    if (typeof errObj.message === "string") return errObj.message;
+  }
+  return JSON.stringify(payload);
 }
 
 export async function POST(request: NextRequest) {
@@ -436,20 +439,29 @@ export async function POST(request: NextRequest) {
           tools: GEOAI_TOOLS,
           store: false,
         }),
-        signal: AbortSignal.timeout(18_000), // Har bir bosqich uchun 18s cheklov
+        signal: AbortSignal.timeout(25_000),
       });
 
-      const payload = (await response.json()) as InteractionPayload;
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = await response.text();
+      }
+
       if (!response.ok) {
-        console.error("GeoAI upstream xatosi:", response.status, payload.error?.message);
+        const errorText = extractErrorMessage(payload, response.status);
+        console.error("GeoAI Upstream API Xatosi:", response.status, errorText);
         return NextResponse.json(
-          { error: `GeoAI javob bermadi: ${payload.error?.message || "Upstream xato"}` },
+          { error: `API Xatosi (${response.status}): ${errorText}` },
           { status: 502 },
         );
       }
 
-      answer = extractOutput(payload) || answer;
-      const steps = Array.isArray(payload.steps) ? payload.steps : [];
+      const resObj = asRecord(payload);
+      answer = extractOutput(resObj) || answer;
+
+      const steps = Array.isArray(resObj.steps) ? (resObj.steps as InteractionStep[]) : [];
       const functionCalls = steps.filter(
         (step) =>
           step.type === "function_call" &&
@@ -478,10 +490,15 @@ export async function POST(request: NextRequest) {
       { answer: withMandatoryContact(answer) },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch (error) {
-    console.error("GeoAI so'rov bajarilmadi:", error);
+    } catch (error) {
+    console.error("GeoAI ishlov berishda xato:", error);
     return NextResponse.json(
-      { error: "GeoAI so'rov kutish vaqti tugadi yoki server xatosi yuz berdi." },
+      {
+        error:
+          error instanceof Error
+            ? `GeoAI Server Xatosi: ${error.message}`
+            : "GeoAI so'rovi vaqti tugadi yoki kutilmagan xato yuz berdi.",
+      },
       { status: 504 },
     );
   }

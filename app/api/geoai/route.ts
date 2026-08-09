@@ -14,6 +14,9 @@ import {
 import { calculateCutFill, parseVolumeRows } from "@/lib/volume";
 import { verifyGeoCalcUser } from "@/lib/firebase-server";
 
+// Vercel serverless timeout cheklovini 60 soniyaga uzaytirish
+export const maxDuration = 60;
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -336,7 +339,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "GeoAI server kaliti hali sozlanmagan." },
+      { error: "GeoAI server kaliti (GEMINI_API_KEY) kiritilmagan." },
       { status: 503 },
     );
   }
@@ -410,7 +413,7 @@ export async function POST(request: NextRequest) {
   const endpoint =
     process.env.GEMINI_API_URL ||
     "https://generativelanguage.googleapis.com/v1beta/interactions";
-  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   try {
     let interactionInput: InteractionStep[] = [
@@ -418,7 +421,7 @@ export async function POST(request: NextRequest) {
     ];
     let answer = "";
 
-    for (let round = 0; round < 4; round += 1) {
+    for (let round = 0; round < 3; round += 1) {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -433,14 +436,14 @@ export async function POST(request: NextRequest) {
           tools: GEOAI_TOOLS,
           store: false,
         }),
-        signal: AbortSignal.timeout(55_000),
+        signal: AbortSignal.timeout(18_000), // Har bir bosqich uchun 18s cheklov
       });
 
       const payload = (await response.json()) as InteractionPayload;
       if (!response.ok) {
-        console.error("GeoAI upstream error", response.status, payload.error?.message);
+        console.error("GeoAI upstream xatosi:", response.status, payload.error?.message);
         return NextResponse.json(
-          { error: "GeoAI xizmati vaqtincha javob bermadi. Keyinroq qayta urinib ko‘ring." },
+          { error: `GeoAI javob bermadi: ${payload.error?.message || "Upstream xato"}` },
           { status: 502 },
         );
       }
@@ -473,16 +476,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { answer: withMandatoryContact(answer) },
-      {
-        headers: {
-          "Cache-Control": "no-store",
-        },
-      },
+      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    console.error("GeoAI request failed", error);
+    console.error("GeoAI so'rov bajarilmadi:", error);
     return NextResponse.json(
-      { error: "GeoAI bilan bog‘lanishda vaqtinchalik xato yuz berdi." },
+      { error: "GeoAI so'rov kutish vaqti tugadi yoki server xatosi yuz berdi." },
       { status: 504 },
     );
   }

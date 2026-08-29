@@ -67,9 +67,9 @@ import AuthGate from "@/components/auth-gate";
 const InteractiveMap = dynamic(() => import("@/components/interactive-map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[520px] rounded-[28px] bg-[var(--panel)]/60 backdrop-blur-2xl border border-[var(--border)] flex flex-col items-center justify-center gap-3 text-[var(--muted)]">
-      <Globe className="w-7 h-7 text-[var(--accent)] animate-spin" />
-      <span className="text-sm font-medium">Xarita yuklanmoqda...</span>
+    <div className="w-full h-[520px] liquid-glass flex flex-col items-center justify-center gap-3 text-[var(--muted)]">
+      <Globe className="w-8 h-8 text-[var(--accent)] animate-spin" />
+      <span className="text-sm font-semibold">Sun'iy yo'ldosh xaritasi yuklanmoqda...</span>
     </div>
   ),
 });
@@ -94,7 +94,7 @@ function getNavItems(l: AppLanguage): NavItem[] {
     { id: "shapes",    label: tr(l, "Shakllar",         "Фигуры",       "Shapes"),        icon: Triangle },
     { id: "slope",     label: tr(l, "Nishablik",        "Уклон",        "Slope"),         icon: TrendingUp },
     { id: "volume",    label: tr(l, "Hajm (Cut&Fill)",  "Объём",        "Volume"),        icon: BoxIcon },
-    { id: "geoai",     label: "GeoAI",                                                     icon: Sparkles,    badge: "AI" },
+    { id: "geoai",     label: "GeoAI",                                                     icon: Sparkles,    badge: "BETA · Tekin" },
     { id: "contacts",  label: tr(l, "Bog'lanish",       "Контакты",     "Contacts"),      icon: Phone },
     { id: "guide",     label: tr(l, "Qo'llanma",       "Справка",      "Guide"),         icon: Info },
     { id: "history",   label: tr(l, "Tarix",            "История",      "History"),       icon: History },
@@ -116,11 +116,11 @@ const VOLUME_SAMPLE = `0 0 100.40
 40 80 101.40
 80 80 100.00`;
 
-// ─── iOS 26 Shared UI Primitives ──────────────────────────────────────────────
+// ─── Liquid Glass UI Primitives ───────────────────────────────────────────────
 
-function IosCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function LiquidCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-[28px] bg-[var(--panel)]/80 backdrop-blur-[40px] border border-[var(--border)] shadow-[0_8px_32px_rgba(0,0,0,0.28)] ${className}`}>
+    <div className={`liquid-glass ${className}`}>
       {children}
     </div>
   );
@@ -128,18 +128,18 @@ function IosCard({ children, className = "" }: { children: React.ReactNode; clas
 
 function StatChip({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex-1 min-w-0 p-3 rounded-[20px] bg-[var(--panel-raised)] border border-[var(--border)] text-center">
-      <div className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-sm font-bold truncate ${accent ? "text-[var(--accent)]" : "text-[var(--text)]"}`}>{value}</div>
+    <div className="flex-1 min-w-0 p-3.5 liquid-pill text-center">
+      <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">{label}</div>
+      <div className={`text-sm font-black truncate ${accent ? "text-[var(--accent)]" : "text-[var(--text)]"}`}>{value}</div>
     </div>
   );
 }
 
 function SectionHeader({ title, subtitle }: { title: React.ReactNode; subtitle?: string }) {
   return (
-    <div className="mb-5">
-      <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">{title}</h2>
-      {subtitle && <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">{subtitle}</p>}
+    <div className="mb-6">
+      <h2 className="text-xl md:text-2xl font-black text-[var(--text)] tracking-tight flex items-center flex-wrap gap-2">{title}</h2>
+      {subtitle && <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed font-medium">{subtitle}</p>}
     </div>
   );
 }
@@ -267,230 +267,220 @@ export default function GeoCalcApp() {
 
   const navItems = getNavItems(language);
 
-  // ─── iOS 26 Segmented Tab (sidebar nav) item ───────────────────────────────
+  // Nav Item
   const NavButton = ({ item }: { item: NavItem }) => {
     const isActive = activeModule === item.id;
     const Icon = item.icon;
     return (
       <button
         onClick={() => { setActiveModule(item.id); setIsSidebarOpen(false); }}
-        className={`group w-full text-left px-3.5 py-2.5 rounded-[18px] flex items-center gap-3 transition-all duration-200 ${
+        className={`group w-full text-left px-4 py-3 rounded-full flex items-center gap-3 transition-all duration-200 ${
           isActive
-            ? "bg-[var(--accent)] text-black shadow-[0_4px_12px_var(--accent)/30]"
-            : "text-[var(--muted)] hover:bg-[var(--panel-raised)] hover:text-[var(--text)]"
+            ? "liquid-btn-primary text-black shadow-lg"
+            : "text-[var(--muted)] hover:bg-white/10 hover:text-[var(--text)]"
         }`}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-black" : "text-[var(--muted-2)] group-hover:text-[var(--accent)]"}`} />
-        <span className="text-xs font-semibold flex-1 truncate">{item.label}</span>
+        <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? "text-black" : "text-[var(--muted-2)] group-hover:text-[var(--accent)]"}`} />
+        <span className="text-xs font-bold flex-1 truncate">{item.label}</span>
         {item.badge && (
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg uppercase tracking-wider ${
-            isActive ? "bg-black/20 text-black" : "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--border-strong)]"
+          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+            isActive ? "bg-black/25 text-black" : "bg-[var(--accent-soft)] text-[var(--accent)] border border-white/20"
           }`}>{item.badge}</span>
         )}
       </button>
     );
   };
 
-  // ─── Field Component ─────────────────────────────────────────────────────────
+  // Field
   const Field = ({ label, value, onChange, type = "text", placeholder = "" }: {
     label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string;
   }) => (
     <div>
-      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1.5">{label}</label>
+      <label className="block text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1.5">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3.5 py-2.5 rounded-[14px] bg-[var(--field)] border border-[var(--border)] text-[var(--text)] text-sm font-mono outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted-2)]" />
+        className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-[var(--text)] text-sm font-mono outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted-2)] shadow-inner" />
     </div>
   );
 
   const PrimaryBtn = ({ onClick, children, className = "" }: { onClick: () => void; children: React.ReactNode; className?: string }) => (
     <button onClick={onClick}
-      className={`flex items-center justify-center gap-2 px-5 py-3 rounded-[16px] bg-[var(--accent)] text-black font-semibold text-sm shadow-[0_4px_16px_var(--accent)/25] hover:brightness-105 active:scale-[0.98] transition-all ${className}`}>
+      className={`liquid-btn-primary flex items-center justify-center gap-2 px-6 py-3 text-sm ${className}`}>
       {children}
     </button>
   );
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)]/30 font-[system-ui,-apple-system,'SF_Pro_Display',sans-serif] relative overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)]/30 font-sans relative overflow-x-hidden">
 
-      {/* Auth Gate — blocks app if not logged in */}
+      {/* Auth Gate */}
       <AuthGate currentUser={currentUser} isAuthLoading={isAuthLoading} onSignIn={handleSignIn} language={language} />
-
-      {/* Ambient BG glows */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-15%] left-[15%] w-[700px] h-[700px] rounded-full bg-[var(--accent)]/[0.05] blur-[150px]" />
-        <div className="absolute bottom-[-10%] right-[5%] w-[500px] h-[500px] rounded-full bg-[var(--blue)]/[0.05] blur-[120px]" />
-      </div>
 
       {/* Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity:0, y:-16, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:-16 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[var(--panel-solid)] border border-[var(--border-strong)] text-[var(--accent)] text-xs font-semibold shadow-xl backdrop-blur-2xl">
-            <Check className="w-3.5 h-3.5" /> {toast}
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-5 py-3 rounded-full liquid-glass text-[var(--accent)] text-xs font-bold shadow-2xl">
+            <Check className="w-4 h-4" /> {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Layout */}
-      <div className="relative z-10 flex-1 flex flex-col md:flex-row max-w-[1800px] mx-auto w-full">
+      {/* Main Container */}
+      <div className="relative z-10 flex-1 flex flex-col md:flex-row max-w-[1850px] mx-auto w-full">
 
         {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-[300px] flex flex-col bg-[var(--sidebar)] backdrop-blur-[60px] border-r border-[var(--border)] p-4 transition-transform duration-300 ${
+        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-[310px] flex flex-col liquid-glass rounded-none md:rounded-r-[36px] border-y-0 border-l-0 p-5 transition-transform duration-300 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}>
 
-          {/* Logo */}
-          <div className="flex items-center justify-between mb-5">
+          {/* Brand */}
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[18px] bg-[var(--accent)] flex items-center justify-center shadow-lg">
-                <Globe className="w-5.5 h-5.5 text-black w-[22px] h-[22px]" />
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--blue)] flex items-center justify-center shadow-lg border border-white/50">
+                <Globe className="w-6 h-6 text-black" />
               </div>
               <div>
-                <div className="text-base font-bold text-[var(--text)] tracking-tight leading-tight">GeoCalc</div>
-                <div className="text-[10px] text-[var(--muted)] font-medium">Geodeziya & GeoAI</div>
+                <div className="text-lg font-black text-[var(--text)] tracking-tight leading-tight flex items-center gap-1.5">
+                  GeoCalc <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] border border-white/20">PRO</span>
+                </div>
+                <div className="text-[11px] text-[var(--muted)] font-medium">Geodeziya & GeoAI</div>
               </div>
             </div>
-            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-1.5 rounded-xl text-[var(--muted)]"><X className="w-5 h-5" /></button>
+            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 rounded-full hover:bg-white/10 text-[var(--muted)]"><X className="w-5 h-5" /></button>
           </div>
 
           {/* User Profile */}
-          <div className="mb-4 p-3 rounded-[20px] bg-[var(--panel-raised)]/60 border border-[var(--border)]">
+          <div className="mb-5 p-3 rounded-full liquid-pill">
             {currentUser ? (
               <div className="flex items-center gap-2.5 justify-between">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {currentUser.photoURL ? (
-                    <img src={currentUser.photoURL} alt="" className="w-8 h-8 rounded-full border-2 border-[var(--accent)]/40 object-cover" />
+                    <img src={currentUser.photoURL} alt="" className="w-8 h-8 rounded-full border border-white/50 object-cover" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-black font-bold text-xs">
+                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-black font-black text-xs">
                       {currentUser.displayName?.[0] || "U"}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold truncate text-[var(--text)]">{currentUser.displayName || "Foydalanuvchi"}</div>
+                    <div className="text-xs font-bold truncate text-[var(--text)]">{currentUser.displayName || "Foydalanuvchi"}</div>
                     <div className="text-[10px] text-[var(--muted-2)] truncate">{currentUser.email}</div>
                   </div>
                 </div>
                 <button onClick={handleSignOut} title="Chiqish"
-                  className="p-1.5 rounded-xl text-[var(--muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all flex-shrink-0">
+                  className="p-2 rounded-full text-[var(--muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all flex-shrink-0">
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <button onClick={handleSignIn}
-                className="w-full py-2 px-3 rounded-[14px] bg-[var(--accent)] text-black text-xs font-semibold flex items-center justify-center gap-2 hover:brightness-105 active:scale-[0.98] transition-all">
+                className="w-full py-2 px-4 rounded-full liquid-btn-primary text-black text-xs font-bold flex items-center justify-center gap-2">
                 <LogIn className="w-4 h-4" /> Google orqali kirish
               </button>
             )}
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 space-y-0.5 overflow-y-auto">
+          <nav className="flex-1 space-y-1 overflow-y-auto">
             {navItems.map((item) => <NavButton key={item.id} item={item} />)}
           </nav>
 
-          {/* Footer Controls */}
-          <div className="pt-4 mt-4 border-t border-[var(--border)] space-y-3">
+          {/* Bottom Settings */}
+          <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              {/* Language */}
-              <div className="flex items-center bg-[var(--panel-raised)] border border-[var(--border)] rounded-[14px] p-0.5">
+              <div className="flex items-center liquid-pill p-1">
                 {(["uz","ru","en"] as AppLanguage[]).map((l) => (
                   <button key={l} onClick={() => setLanguage(l)}
-                    className={`px-2.5 py-1 rounded-[12px] text-[11px] font-bold uppercase transition-all ${language===l ? "bg-[var(--accent)] text-black shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}>
+                    className={`px-3 py-1 rounded-full text-[11px] font-black uppercase transition-all ${language===l ? "bg-white text-black shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}>
                     {l}
                   </button>
                 ))}
               </div>
-              {/* Theme */}
               <button onClick={() => setTheme(t => t==="dark"?"light":"dark")}
-                className="p-2.5 rounded-[14px] bg-[var(--panel-raised)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)] transition-all">
+                className="p-2.5 rounded-full liquid-pill text-[var(--muted)] hover:text-[var(--text)] transition-all">
                 {theme==="dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
               </button>
             </div>
-            <div className="text-center text-[10px] text-[var(--muted-2)]">
+            <div className="text-center text-[11px] text-[var(--muted-2)] font-medium">
               Powered by <strong className="text-[var(--accent)]">Toirov Azizbek</strong>
             </div>
           </div>
         </aside>
 
-        {/* Sidebar overlay on mobile */}
         {isSidebarOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
         {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 md:p-6 lg:p-8">
 
           {/* Top Mobile Bar */}
-          <div className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[var(--bg)]/90 backdrop-blur-2xl border-b border-[var(--border)]">
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2.5 rounded-[14px] bg-[var(--panel-raised)] border border-[var(--border)]">
+          <div className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 liquid-glass rounded-full mb-4">
+            <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded-full text-[var(--text)]">
               <Menu className="w-5 h-5" />
             </button>
-            <span className="font-bold text-sm flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-[var(--accent)]" /> GeoCalc
+            <span className="font-black text-sm flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-[var(--accent)]" /> GeoCalc PRO
             </span>
             <button onClick={() => setTheme(t => t==="dark"?"light":"dark")}
-              className="p-2.5 rounded-[14px] bg-[var(--panel-raised)] border border-[var(--border)]">
+              className="p-2 rounded-full text-[var(--muted)]">
               {theme==="dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
             </button>
           </div>
 
-          {/* Module content area */}
-          <div className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <div className="flex-1 space-y-6">
 
           {/* ──────────── MODULE: AREA ──────────── */}
           {activeModule==="area" && (
             <div>
               <SectionHeader
-                title={<><Calculator className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer maydonini hisoblash","Расчёт площади участка","Land Area Calculation")}</>}
-                subtitle={tr(language,"WGS84 koordinatalar kiriting yoki xaritada chizing.","Введите WGS84 координаты или нарисуйте на карте.","Enter WGS84 coordinates or draw on map.")}
+                title={<><Calculator className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer maydonini aniq hisoblash","Расчёт площади участка","Precision Land Area Calculation")}</>}
+                subtitle={tr(language,"WGS84 koordinatalarni kiriting yoki quyidagi sun'iy yo'ldosh xaritasida chizing.","Введите координаты WGS84 или нарисуйте участок на спутниковой карте.","Enter WGS84 coordinates or draw directly on the interactive satellite map.")}
               />
 
-              {/* Toggle */}
-              <div className="flex items-center gap-2 mb-5 p-1 bg-[var(--panel-raised)] border border-[var(--border)] rounded-[18px] w-fit">
-                {[{v:true,l:tr(language,"🗺️ Xarita","🗺️ Карта","🗺️ Map")},{v:false,l:tr(language,"✏️ Matn","✏️ Текст","✏️ Text")}].map(o=>(
+              <div className="flex items-center gap-2 mb-5 p-1 liquid-pill w-fit">
+                {[{v:true,l:tr(language,"🗺️ Sun'iy yo'ldosh xarita","🗺️ Спутниковая карта","🗺️ Satellite Map")},{v:false,l:tr(language,"✏️ Matnli koordinatalar","✏️ Текст координат","✏️ Text coordinates")}].map(o=>(
                   <button key={String(o.v)} onClick={() => setAreaMapView(o.v)}
-                    className={`px-4 py-1.5 rounded-[14px] text-xs font-semibold transition-all ${areaMapView===o.v?"bg-[var(--accent)] text-black shadow-sm":"text-[var(--muted)] hover:text-[var(--text)]"}`}>
+                    className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${areaMapView===o.v?"bg-white text-black shadow-md":"text-[var(--muted)] hover:text-[var(--text)]"}`}>
                     {o.l}
                   </button>
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Left: input + results */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-5 space-y-4">
-                  <IosCard className="p-5 space-y-4">
+                  <LiquidCard className="p-6 space-y-4">
                     <div>
-                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                      <label className="block text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
                         {tr(language,"Koordinatalar (Kenglik Uzunlik)","Координаты (Широта Долгота)","Coordinates (Lat Lon)")}
-                        <span className="ml-2 text-[var(--accent)]">{areaPoints.length} {tr(language,"nuqta","точек","points")}</span>
+                        <span className="ml-2 text-[var(--accent)] font-mono">({areaPoints.length} {tr(language,"nuqta","точек","points")})</span>
                       </label>
                       <textarea rows={7} value={areaInput} onChange={e=>setAreaInput(e.target.value)}
                         placeholder="41.311081 69.240562\n41.311081 69.241562\n..."
-                        className="w-full px-4 py-3 rounded-[16px] bg-[var(--field)] border border-[var(--border)] font-mono text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] transition-colors resize-y placeholder:text-[var(--muted-2)]" />
+                        className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] transition-colors resize-y placeholder:text-[var(--muted-2)] shadow-inner" />
                     </div>
-                    {areaError && <div className="px-3 py-2 rounded-[12px] bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-[var(--danger)] text-xs">{areaError}</div>}
+                    {areaError && <div className="px-4 py-2.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/40 text-[var(--danger)] text-xs font-semibold">{areaError}</div>}
                     <div className="flex gap-2">
-                      <button onClick={()=>setAreaInput(AREA_SAMPLE)} className="px-3 py-1.5 rounded-[12px] bg-[var(--panel-raised)] border border-[var(--border)] text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-all">{tr(language,"Namuna","Пример","Sample")}</button>
-                      <button onClick={()=>setAreaInput("")} className="px-3 py-1.5 rounded-[12px] bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-[10px] text-[var(--danger)] transition-all">{tr(language,"Tozala","Очистить","Clear")}</button>
+                      <button onClick={()=>setAreaInput(AREA_SAMPLE)} className="px-4 py-2 rounded-full liquid-pill text-xs font-bold text-[var(--muted)] hover:text-[var(--text)]">{tr(language,"Namuna","Пример","Sample")}</button>
+                      <button onClick={()=>setAreaInput("")} className="px-4 py-2 rounded-full bg-[var(--danger-soft)] text-xs font-bold text-[var(--danger)] border border-[var(--danger)]/30">{tr(language,"Tozalash","Очистить","Clear")}</button>
                     </div>
-                  </IosCard>
+                  </LiquidCard>
 
                   {areaProps && (
                     <div className="grid grid-cols-2 gap-3">
-                      <StatChip label="Maydon m²" value={formatNumber(areaProps.areaM2)} accent />
-                      <StatChip label="Sotix" value={areaProps.areaSotix.toFixed(2)} />
-                      <StatChip label="Gektar" value={areaProps.areaHectares.toFixed(4)+" ha"} />
+                      <StatChip label="Maydon (m²)" value={formatNumber(areaProps.areaM2)} accent />
+                      <StatChip label="Sotix (Ar)" value={areaProps.areaSotix.toFixed(2)} />
+                      <StatChip label="Gektar (ha)" value={areaProps.areaHectares.toFixed(4)+" ha"} />
                       <StatChip label="Perimetr" value={areaProps.perimeterMeters.toFixed(1)+" m"} />
                     </div>
                   )}
                 </div>
 
-                {/* Right: Map or info */}
                 <div className="lg:col-span-7">
                   {areaMapView ? (
-                    <InteractiveMap initialPoints={areaPoints} onPointsChange={handleMapPoints} language={language} height="530px" />
+                    <InteractiveMap initialPoints={areaPoints} onPointsChange={handleMapPoints} language={language} height="540px" />
                   ) : (
-                    <IosCard className="h-[530px] flex items-center justify-center text-[var(--muted)] text-sm">
-                      {tr(language,"Koordinatalarni matn maydoniga kiriting","Введите координаты в текстовое поле","Enter coordinates in the text field")}
-                    </IosCard>
+                    <LiquidCard className="h-[540px] flex flex-col items-center justify-center text-center p-8 text-[var(--muted)]">
+                      <Globe className="w-12 h-12 text-[var(--accent)] mb-3 opacity-60" />
+                      <div className="text-sm font-semibold">{tr(language,"Xaritada ko'rish uchun yuqoridagi 'Sun'iy yo'ldosh xarita' tugmasini bosing.","Переключитесь на карту для интерактивного черчения.","Switch to satellite map to draw interactively.")}</div>
+                    </LiquidCard>
                   )}
                 </div>
               </div>
@@ -500,28 +490,28 @@ export default function GeoCalcApp() {
           {/* ──────────── MODULE: MAP ──────────── */}
           {activeModule==="map" && (
             <div>
-              <SectionHeader title={<><MapIcon className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Sun'iy yo'ldosh xarita","Спутниковая карта","Satellite Map")}</>} />
-              <InteractiveMap language={language} height="calc(100vh - 200px)" />
+              <SectionHeader title={<><MapIcon className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"To'liq ekranli Sun'iy yo'ldosh xaritasi","Спутниковая интерактивная карта","Full Satellite Interactive Map")}</>} />
+              <InteractiveMap language={language} height="calc(100vh - 210px)" />
             </div>
           )}
 
           {/* ──────────── MODULE: DISTANCE ──────────── */}
           {activeModule==="distance" && (
-            <div className="max-w-3xl">
+            <div className="max-w-3xl space-y-6">
               <SectionHeader
-                title={<><Compass className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Masofa va Azimut","Расстояние и Азимут","Distance & Azimuth")}</>}
-                subtitle="Vincenty ellipsoidal formula — 0.5 mm aniqlik"
+                title={<><Compass className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Masofa, Azimut va Rumb","Расстояние, Азимут и Румб","Distance, Azimuth & Bearing")}</>}
+                subtitle="Vincenty ellipsoidal formula — 0.5 mm geodezik aniqlik"
               />
 
-              <IosCard className="p-6 space-y-5">
+              <LiquidCard className="p-6 md:p-8 space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-3">
-                    <div className="text-xs font-semibold text-[var(--accent)]">{tr(language,"1-nuqta","Точка 1","Point 1")}</div>
+                    <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">{tr(language,"1-Boshlang'ich nuqta","Точка 1","Point 1")}</div>
                     <Field label="Lat" value={distP1.lat} onChange={v=>setDistP1({...distP1,lat:v})} />
                     <Field label="Lon" value={distP1.lon} onChange={v=>setDistP1({...distP1,lon:v})} />
                   </div>
                   <div className="space-y-3">
-                    <div className="text-xs font-semibold text-[var(--blue)]">{tr(language,"2-nuqta","Точка 2","Point 2")}</div>
+                    <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">{tr(language,"2-Oxirgi nuqta","Точка 2","Point 2")}</div>
                     <Field label="Lat" value={distP2.lat} onChange={v=>setDistP2({...distP2,lat:v})} />
                     <Field label="Lon" value={distP2.lon} onChange={v=>setDistP2({...distP2,lon:v})} />
                   </div>
@@ -532,110 +522,105 @@ export default function GeoCalcApp() {
                     setDistResult(r); addHistory({type:"distance",title:"Masofa & Azimut",value:`${r.distanceKm.toFixed(3)} km | ${r.initialAzimuthDeg.toFixed(2)}°`}); showToast("Hisoblandi!");
                   } catch(e:any){showToast(e.message);}
                 }} className="w-full">
-                  <Calculator className="w-4 h-4" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
+                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
                 </PrimaryBtn>
                 {distResult && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/10">
                     <StatChip label="Metr" value={distResult.distanceMeters.toFixed(1)+" m"} accent />
                     <StatChip label="Km" value={distResult.distanceKm.toFixed(3)+" km"} />
                     <StatChip label="Azimut" value={distResult.initialAzimuthDeg.toFixed(2)+"°"} />
                     <StatChip label="Rumb" value={distResult.rhumbString} />
                   </div>
                 )}
-              </IosCard>
+              </LiquidCard>
 
-              {/* Direct geodetic */}
-              <div className="mt-5">
-                <IosCard className="p-6 space-y-4">
-                  <div className="text-xs font-bold text-[var(--blue)] uppercase tracking-wider">{tr(language,"To'g'ri geodezik masala","Прямая геодезическая задача","Direct Geodetic Problem")}</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Start Lat" value={directStart.lat} onChange={v=>setDirectStart({...directStart,lat:v})} />
-                    <Field label="Start Lon" value={directStart.lon} onChange={v=>setDirectStart({...directStart,lon:v})} />
-                    <Field label="Azimut (°)" value={directAz} onChange={setDirectAz} />
-                    <Field label="Masofa (m)" value={directDist} onChange={setDirectDist} />
+              <LiquidCard className="p-6 md:p-8 space-y-4">
+                <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">{tr(language,"To'g'ri geodezik masala (Nuqta + Azimut + Masofa)","Прямая геодезическая задача","Direct Geodetic Problem")}</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Start Lat" value={directStart.lat} onChange={v=>setDirectStart({...directStart,lat:v})} />
+                  <Field label="Start Lon" value={directStart.lon} onChange={v=>setDirectStart({...directStart,lon:v})} />
+                  <Field label="Azimut (°)" value={directAz} onChange={setDirectAz} />
+                  <Field label="Masofa (m)" value={directDist} onChange={setDirectDist} />
+                </div>
+                <PrimaryBtn onClick={() => {
+                  try {
+                    const r = calculateDirectGeodeticPoint({lat:Number(directStart.lat),lon:Number(directStart.lon)},Number(directAz),Number(directDist));
+                    setDirectResult(r); showToast("Yangi nuqta topildi!");
+                  } catch(e:any){showToast(e.message);}
+                }}>
+                  <ChevronRight className="w-4 h-4 text-black" /> {tr(language,"Nuqta topish","Найти точку","Find Point")}
+                </PrimaryBtn>
+                {directResult && (
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
+                    <StatChip label="Lat" value={directResult.lat.toFixed(7)} accent />
+                    <StatChip label="Lon" value={directResult.lon.toFixed(7)} accent />
                   </div>
-                  <PrimaryBtn onClick={() => {
-                    try {
-                      const r = calculateDirectGeodeticPoint({lat:Number(directStart.lat),lon:Number(directStart.lon)},Number(directAz),Number(directDist));
-                      setDirectResult(r); showToast("Yangi nuqta topildi!");
-                    } catch(e:any){showToast(e.message);}
-                  }}>
-                    <ChevronRight className="w-4 h-4" /> {tr(language,"Nuqta topish","Найти точку","Find Point")}
-                  </PrimaryBtn>
-                  {directResult && (
-                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--border)]">
-                      <StatChip label="Lat" value={directResult.lat.toFixed(7)} accent />
-                      <StatChip label="Lon" value={directResult.lon.toFixed(7)} accent />
-                    </div>
-                  )}
-                </IosCard>
-              </div>
+                )}
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: CONVERTER ──────────── */}
           {activeModule==="converter" && (
-            <div className="max-w-3xl">
-              <SectionHeader title={<><RefreshCw className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Koordinatalar Konvertori","Конвертер координат","Coordinate Converter")}</>} />
-              <IosCard className="p-6 space-y-5">
-                <div className="text-xs font-bold text-[var(--accent)] uppercase">DD → DMS</div>
-                <div className="grid grid-cols-2 gap-3">
+            <div className="max-w-3xl space-y-6">
+              <SectionHeader title={<><RefreshCw className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Koordinatalar Konvertori","Конвертер координат","Coordinate Converter")}</>} />
+              <LiquidCard className="p-6 md:p-8 space-y-5">
+                <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">O'nli gradus → DMS (GMS)</div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Field label="Lat DD" value={convLat} onChange={setConvLat} />
-                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1.5 px-1">
+                    <div className="text-xs font-mono font-bold text-[var(--accent)] mt-2 px-2">
                       {Number.isFinite(Number(convLat)) ? toDMS(Number(convLat),"lat") : "—"}
                     </div>
                   </div>
                   <div>
                     <Field label="Lon DD" value={convLon} onChange={setConvLon} />
-                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1.5 px-1">
+                    <div className="text-xs font-mono font-bold text-[var(--accent)] mt-2 px-2">
                       {Number.isFinite(Number(convLon)) ? toDMS(Number(convLon),"lon") : "—"}
                     </div>
                   </div>
                 </div>
-              </IosCard>
+              </LiquidCard>
 
-              <div className="mt-5">
-                <IosCard className="p-6 space-y-4">
-                  <div className="text-xs font-bold text-[var(--blue)] uppercase">Batch Converter</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <textarea rows={6} value={batchIn} onChange={e=>setBatchIn(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-[16px] bg-[var(--field)] border border-[var(--border)] font-mono text-xs resize-none outline-none focus:border-[var(--accent)] transition-colors" />
-                    <textarea rows={6} readOnly value={batchOut} placeholder={tr(language,"Natijalar...","Результаты...","Results...")}
-                      className="w-full px-3 py-2.5 rounded-[16px] bg-[var(--panel-raised)] border border-[var(--border)] font-mono text-xs text-[var(--accent)] resize-none outline-none" />
-                  </div>
-                  <PrimaryBtn onClick={() => {
-                    try {
-                      const pts = parseCoordinates(batchIn);
-                      setBatchOut(pts.map((p,i)=>`#${i+1}: ${toDMS(p.lat,"lat")} | ${toDMS(p.lon,"lon")}`).join("\n"));
-                      showToast("Aylantrildi!");
-                    } catch(e:any){showToast(e.message);}
-                  }}>GMS ga aylantirish</PrimaryBtn>
-                </IosCard>
-              </div>
+              <LiquidCard className="p-6 md:p-8 space-y-4">
+                <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">Ommaviy (Batch) Ro'yxat Konvertori</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <textarea rows={6} value={batchIn} onChange={e=>setBatchIn(e.target.value)}
+                    className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs outline-none focus:border-[var(--accent)] resize-none shadow-inner" />
+                  <textarea rows={6} readOnly value={batchOut} placeholder={tr(language,"Natijalar...","Результаты...","Results...")}
+                    className="w-full px-4 py-3 rounded-[20px] bg-white/10 border border-[var(--border-glass)] font-mono text-xs text-[var(--accent)] resize-none outline-none shadow-inner" />
+                </div>
+                <PrimaryBtn onClick={() => {
+                  try {
+                    const pts = parseCoordinates(batchIn);
+                    setBatchOut(pts.map((p,i)=>`#${i+1}: ${toDMS(p.lat,"lat")} | ${toDMS(p.lon,"lon")}`).join("\n"));
+                    showToast("Konvertatsiya qilindi!");
+                  } catch(e:any){showToast(e.message);}
+                }}>Barchasini GMS ga o'girish</PrimaryBtn>
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: SHAPES ──────────── */}
           {activeModule==="shapes" && (
-            <div className="max-w-3xl">
-              <SectionHeader title={<><Triangle className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Sodda Geometrik Shakllar","Простые фигуры","Simple Shapes")}</>} />
+            <div className="max-w-3xl space-y-6">
+              <SectionHeader title={<><Triangle className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Sodda Geometrik Shakllar","Простые фигуры","Simple Shapes")}</>} />
 
-              <div className="flex flex-wrap gap-2 mb-5 p-1 bg-[var(--panel-raised)] border border-[var(--border)] rounded-[20px]">
+              <div className="flex flex-wrap gap-2 p-1.5 liquid-pill w-fit">
                 {[{v:"rect",l:tr(language,"To'rtburchak","Прямоугольник","Rectangle")},{v:"tri",l:tr(language,"Uchburchak","Треугольник","Triangle")},{v:"trap",l:tr(language,"Trapetsiya","Трапеция","Trapezoid")},{v:"circ",l:tr(language,"Doira","Окружность","Circle")},{v:"pit",l:tr(language,"Kotlovan","Котлован","Pit")}].map(s=>(
                   <button key={s.v} onClick={()=>setShapeType(s.v as any)}
-                    className={`px-4 py-2 rounded-[14px] text-xs font-semibold transition-all ${shapeType===s.v?"bg-[var(--accent)] text-black shadow-sm":"text-[var(--muted)] hover:text-[var(--text)]"}`}>{s.l}</button>
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${shapeType===s.v?"bg-white text-black shadow-md":"text-[var(--muted)] hover:text-[var(--text)]"}`}>{s.l}</button>
                 ))}
               </div>
 
-              <IosCard className="p-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <LiquidCard className="p-6 md:p-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    {shapeType==="rect" && <><Field label={tr(language,"Eni a (m)","Ширина a (м)","Width a (m)")} value={String(sp.w)} onChange={v=>setSp({...sp,w:Number(v)})} type="number" /><Field label={tr(language,"Bo'yi b (m)","Длина b (м)","Length b (m)")} value={String(sp.l)} onChange={v=>setSp({...sp,l:Number(v)})} type="number" /></>}
+                    {shapeType==="rect" && <><Field label="Eni a (m)" value={String(sp.w)} onChange={v=>setSp({...sp,w:Number(v)})} type="number" /><Field label="Bo'yi b (m)" value={String(sp.l)} onChange={v=>setSp({...sp,l:Number(v)})} type="number" /></>}
                     {shapeType==="tri" && <><Field label="a (m)" value={String(sp.a)} onChange={v=>setSp({...sp,a:Number(v)})} type="number" /><Field label="b (m)" value={String(sp.b)} onChange={v=>setSp({...sp,b:Number(v)})} type="number" /><Field label="c (m)" value={String(sp.c)} onChange={v=>setSp({...sp,c:Number(v)})} type="number" /></>}
                     {shapeType==="trap" && <><Field label="a (m)" value={String(sp.a)} onChange={v=>setSp({...sp,a:Number(v)})} type="number" /><Field label="b (m)" value={String(sp.b)} onChange={v=>setSp({...sp,b:Number(v)})} type="number" /><Field label="h (m)" value={String(sp.h)} onChange={v=>setSp({...sp,h:Number(v)})} type="number" /></>}
-                    {shapeType==="circ" && <Field label="R (m)" value={String(sp.r)} onChange={v=>setSp({...sp,r:Number(v)})} type="number" />}
-                    {shapeType==="pit" && <><Field label="S1 m²" value={String(sp.topArea)} onChange={v=>setSp({...sp,topArea:Number(v)})} type="number" /><Field label="S2 m²" value={String(sp.bottomArea)} onChange={v=>setSp({...sp,bottomArea:Number(v)})} type="number" /><Field label="H (m)" value={String(sp.depth)} onChange={v=>setSp({...sp,depth:Number(v)})} type="number" /></>}
+                    {shapeType==="circ" && <Field label="Radius R (m)" value={String(sp.r)} onChange={v=>setSp({...sp,r:Number(v)})} type="number" />}
+                    {shapeType==="pit" && <><Field label="S1 (yuqori m²)" value={String(sp.topArea)} onChange={v=>setSp({...sp,topArea:Number(v)})} type="number" /><Field label="S2 (tub m²)" value={String(sp.bottomArea)} onChange={v=>setSp({...sp,bottomArea:Number(v)})} type="number" /><Field label="Chuqurlik H (m)" value={String(sp.depth)} onChange={v=>setSp({...sp,depth:Number(v)})} type="number" /></>}
                   </div>
                   <div className="flex flex-col justify-center space-y-3">
                     {shapeResult?.area != null && <StatChip label="Maydon" value={`${shapeResult.area} m² (${(shapeResult.area/100).toFixed(2)} sotix)`} accent />}
@@ -643,17 +628,17 @@ export default function GeoCalcApp() {
                     {shapeResult?.volume != null && <StatChip label="Hajm" value={`${shapeResult.volume} m³`} />}
                   </div>
                 </div>
-              </IosCard>
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: SLOPE ──────────── */}
           {activeModule==="slope" && (
-            <div className="max-w-3xl">
-              <SectionHeader title={<><TrendingUp className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Nivelirlash va Nishablik","Нивелирование и Уклон","Leveling & Slope")}</>} />
+            <div className="max-w-3xl space-y-6">
+              <SectionHeader title={<><TrendingUp className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Nivelirlash va Nishablik","Нивелирование и Уклон","Leveling & Slope")}</>} />
 
-              <IosCard className="p-6 space-y-4 mb-5">
-                <div className="text-xs font-bold text-[var(--accent)] uppercase">1. Nishablik</div>
+              <LiquidCard className="p-6 md:p-8 space-y-4">
+                <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">1. Nishablikni hisoblash</div>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Δh (m)" value={slopeH} onChange={setSlopeH} type="number" />
                   <Field label="d (m)" value={slopeD} onChange={setSlopeD} type="number" />
@@ -662,47 +647,47 @@ export default function GeoCalcApp() {
                   try { const r=calculateSlope(Number(slopeH),Number(slopeD)); setSlopeRes(r); addHistory({type:"slope",title:"Nishablik",value:`${r.slopePercent}%`}); showToast("Hisoblandi!"); }
                   catch(e:any){showToast(e.message);}
                 }}>
-                  <Calculator className="w-4 h-4" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
+                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
                 </PrimaryBtn>
                 {slopeRes && (
-                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/10">
                     <StatChip label="%" value={slopeRes.slopePercent+"%"} accent />
                     <StatChip label="‰" value={slopeRes.slopePromille+"‰"} />
                     <StatChip label="°" value={slopeRes.slopeAngleDeg+"°"} />
                     <StatChip label="Nisbat" value={slopeRes.ratioString} />
                   </div>
                 )}
-              </IosCard>
+              </LiquidCard>
 
-              <IosCard className="p-6 space-y-4">
+              <LiquidCard className="p-6 md:p-8 space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-[var(--blue)] uppercase">2. Nivelirlash jurnali</div>
+                  <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">2. Nivelirlash jurnali</div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-[var(--muted)]">BM:</span>
+                    <span className="text-[var(--muted)] font-bold">Reper (BM):</span>
                     <input type="number" value={bmVal} onChange={e=>setBmVal(e.target.value)}
-                      className="w-20 px-2 py-1.5 rounded-[10px] bg-[var(--field)] border border-[var(--border)] text-xs font-mono outline-none focus:border-[var(--accent)]" />
+                      className="w-20 px-3 py-1.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs font-mono outline-none focus:border-[var(--accent)]" />
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left font-mono">
                     <thead>
-                      <tr className="border-b border-[var(--border)]">
+                      <tr className="border-b border-white/10">
                         {["Nuqta","BS","IS","FS","HI","RL","Izoh"].map(h=>(
-                          <th key={h} className="px-2 py-2 text-[var(--muted)] font-semibold font-sans text-[10px] uppercase">{h}</th>
+                          <th key={h} className="px-3 py-2.5 text-[var(--muted)] font-bold font-sans text-[10px] uppercase">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {levelTable.map(row=>(
-                        <tr key={row.id} className="border-b border-[var(--border)]/40">
-                          <td className="px-2 py-2 font-bold text-[var(--accent)]">{row.stationName}</td>
-                          <td className="px-2 py-2">{row.backsight ?? "—"}</td>
-                          <td className="px-2 py-2">{row.intermediate ?? "—"}</td>
-                          <td className="px-2 py-2">{row.foresight ?? "—"}</td>
-                          <td className="px-2 py-2 font-bold text-[var(--blue)]">{row.heightOfInstrument?.toFixed(3)}</td>
-                          <td className="px-2 py-2 font-bold text-[var(--text)]">{row.reducedLevel?.toFixed(3)}</td>
-                          <td className="px-2 py-2 text-[var(--muted-2)] font-sans">{row.remark ?? ""}</td>
+                        <tr key={row.id} className="border-b border-white/5">
+                          <td className="px-3 py-2 font-bold text-[var(--accent)]">{row.stationName}</td>
+                          <td className="px-3 py-2">{row.backsight ?? "—"}</td>
+                          <td className="px-3 py-2">{row.intermediate ?? "—"}</td>
+                          <td className="px-3 py-2">{row.foresight ?? "—"}</td>
+                          <td className="px-3 py-2 font-bold text-[var(--blue)]">{row.heightOfInstrument?.toFixed(3)}</td>
+                          <td className="px-3 py-2 font-bold text-[var(--text)]">{row.reducedLevel?.toFixed(3)}</td>
+                          <td className="px-3 py-2 text-[var(--muted-2)] font-sans">{row.remark ?? ""}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -713,31 +698,31 @@ export default function GeoCalcApp() {
                   try { const r=solveDifferentialLeveling(Number(bmVal),levelRows); setLevelTable(r); showToast("Jurnal hisoblandi!"); }
                   catch(e:any){showToast(e.message);}
                 }}>
-                  <Calculator className="w-4 h-4" /> {tr(language,"Jurnalni hisoblash","Рассчитать журнал","Calculate Journal")}
+                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Jurnalni hisoblash","Рассчитать журнал","Calculate Journal")}
                 </PrimaryBtn>
-              </IosCard>
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: VOLUME ──────────── */}
           {activeModule==="volume" && (
-            <div className="max-w-3xl">
-              <SectionHeader title={<><BoxIcon className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer ishlari hajmi (TIN Cut & Fill)","Объём Cut & Fill (TIN)","Volume Cut & Fill (TIN)")}</>} />
+            <div className="max-w-3xl space-y-6">
+              <SectionHeader title={<><BoxIcon className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer ishlari hajmi (TIN Cut & Fill)","Объём Cut & Fill (TIN)","Volume Cut & Fill (TIN)")}</>} />
 
-              <IosCard className="p-6 space-y-4">
+              <LiquidCard className="p-6 md:p-8 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Koordinata turi","Координаты","Coord Type")}</label>
+                    <label className="block text-[10px] font-bold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Koordinata turi","Координаты","Coord Type")}</label>
                     <select value={volCoord} onChange={e=>setVolCoord(e.target.value as any)}
-                      className="w-full px-3 py-2.5 rounded-[14px] bg-[var(--field)] border border-[var(--border)] text-sm text-[var(--text)] outline-none">
+                      className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs text-[var(--text)] outline-none">
                       <option value="local">Metrik (X Y Z)</option>
                       <option value="wgs84">WGS84 (Lat Lon Z)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Loyiha turi","Тип проекта","Design Mode")}</label>
+                    <label className="block text-[10px] font-bold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Loyiha turi","Тип проекта","Design Mode")}</label>
                     <select value={volDesign} onChange={e=>setVolDesign(e.target.value as any)}
-                      className="w-full px-3 py-2.5 rounded-[14px] bg-[var(--field)] border border-[var(--border)] text-sm text-[var(--text)] outline-none">
+                      className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs text-[var(--text)] outline-none">
                       <option value="level">Yagona sath</option>
                       <option value="per-point">Har bir nuqta</option>
                     </select>
@@ -746,9 +731,9 @@ export default function GeoCalcApp() {
                 </div>
 
                 <textarea rows={7} value={volIn} onChange={e=>setVolIn(e.target.value)}
-                  className="w-full px-4 py-3 rounded-[16px] bg-[var(--field)] border border-[var(--border)] font-mono text-xs outline-none focus:border-[var(--accent)] resize-y" />
+                  className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs outline-none focus:border-[var(--accent)] resize-y shadow-inner" />
 
-                {volError && <div className="px-3 py-2 rounded-[12px] bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-[var(--danger)] text-xs">{volError}</div>}
+                {volError && <div className="px-4 py-2.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-[var(--danger)] text-xs font-semibold">{volError}</div>}
 
                 <PrimaryBtn onClick={() => {
                   try {
@@ -759,52 +744,67 @@ export default function GeoCalcApp() {
                     showToast("Hajm hisoblandi!");
                   } catch(e:any){setVolError(e.message);setVolResult(null);}
                 }} className="w-full">
-                  <BoxIcon className="w-4 h-4" /> TIN bilan hisoblash
+                  <BoxIcon className="w-4 h-4 text-black" /> TIN bilan hisoblash
                 </PrimaryBtn>
 
                 {volResult && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[var(--border)]">
-                    <div className="p-3 rounded-[16px] bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-center">
-                      <div className="text-[10px] font-bold text-[var(--danger)] uppercase mb-0.5">Cut</div>
-                      <div className="text-base font-bold text-[var(--danger)]">{volResult.cut.toFixed(2)} m³</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/10">
+                    <div className="p-3.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-center">
+                      <div className="text-[10px] font-bold text-[var(--danger)] uppercase mb-0.5">Qazish (Cut)</div>
+                      <div className="text-base font-black text-[var(--danger)]">{volResult.cut.toFixed(2)} m³</div>
                     </div>
-                    <div className="p-3 rounded-[16px] bg-[var(--blue-soft)] border border-[var(--blue)]/30 text-center">
-                      <div className="text-[10px] font-bold text-[var(--blue)] uppercase mb-0.5">Fill</div>
-                      <div className="text-base font-bold text-[var(--blue)]">{volResult.fill.toFixed(2)} m³</div>
+                    <div className="p-3.5 rounded-full bg-[var(--blue-soft)] border border-[var(--blue)]/30 text-center">
+                      <div className="text-[10px] font-bold text-[var(--blue)] uppercase mb-0.5">To'kish (Fill)</div>
+                      <div className="text-base font-black text-[var(--blue)]">{volResult.fill.toFixed(2)} m³</div>
                     </div>
                     <StatChip label="Sof hajm" value={(volResult.net>0?"+":"")+volResult.net.toFixed(2)+" m³"} />
                     <StatChip label="Plan maydon" value={volResult.planArea.toFixed(1)+" m²"} accent />
                   </div>
                 )}
-              </IosCard>
+              </LiquidCard>
             </div>
           )}
 
-          {/* ──────────── MODULE: GEOAI ──────────── */}
+          {/* ──────────── MODULE: GEOAI (BETA - TEKIN) ──────────── */}
           {activeModule==="geoai" && (
             <div className="flex flex-col h-[calc(100vh-140px)]">
               <SectionHeader
-                title={<><Sparkles className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />GeoAI</>}
-                subtitle={tr(language,"Har qanday savolga javob beruvchi, rasm va fayl tahlil qiladigan sun'iy intellekt yordamchi. Vercel'da GEMINI_API_KEY sozlang.","AI-ассистент для любых вопросов, анализа изображений и файлов. Настройте GEMINI_API_KEY в Vercel.","AI assistant for any question, image and file analysis. Configure GEMINI_API_KEY in Vercel.")}
+                title={
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="w-6 h-6 text-[var(--accent)]" />
+                    <span>GeoAI</span>
+                    <span className="text-xs font-black px-3 py-1 rounded-full liquid-btn-primary text-black shadow-md">
+                      BETA · Hozircha tekin
+                    </span>
+                  </div>
+                }
+                subtitle={tr(
+                  language,
+                  "Har qanday savolga javob beruvchi, rasm va fayl tahlil qiladigan universal sun'iy intellekt yordamchi. BETA davrida barcha uchun mutlaqo bepul!",
+                  "Универсальный AI-ассистент: ответы на любые вопросы, анализ изображений и файлов. В период BETA бесплатно для всех!",
+                  "Universal AI assistant: answers any question, analyzes images and files. Completely free during BETA!"
+                )}
               />
-              <IosCard className="flex-1 overflow-hidden flex flex-col">
+              <LiquidCard className="flex-1 overflow-hidden flex flex-col p-0">
                 <GeoAIChat language={language} currentUser={currentUser} />
-              </IosCard>
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: CONTACTS ──────────── */}
           {activeModule==="contacts" && (
-            <div className="max-w-2xl">
-              <SectionHeader title={<><Phone className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Bog'lanish","Контакты","Contacts")}</>} />
+            <div className="max-w-2xl space-y-6">
+              <SectionHeader title={<><Phone className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Bog'lanish va Muallif","Контакты автора","Author & Contacts")}</>} />
 
-              <IosCard className="p-8 space-y-6">
-                <div className="flex items-center gap-4 pb-6 border-b border-[var(--border)]">
-                  <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-[var(--accent)] to-emerald-600 flex items-center justify-center text-2xl font-black text-white shadow-xl">TA</div>
+              <LiquidCard className="p-8 space-y-6">
+                <div className="flex items-center gap-5 pb-6 border-b border-white/10">
+                  <div className="w-18 h-18 rounded-full bg-gradient-to-br from-[var(--accent)] via-[#00e5ff] to-[var(--blue)] flex items-center justify-center text-2xl font-black text-black shadow-xl border border-white/60">
+                    TA
+                  </div>
                   <div>
-                    <div className="text-lg font-bold text-[var(--text)]">Toirov Azizbek</div>
-                    <div className="text-xs text-[var(--accent)] font-semibold">GeoCalc asoschisi va dasturchi</div>
-                    <div className="text-[11px] text-[var(--muted)] mt-0.5">Powered by Toirov Azizbek</div>
+                    <div className="text-xl font-black text-[var(--text)]">Toirov Azizbek</div>
+                    <div className="text-xs text-[var(--accent)] font-bold mt-0.5">GeoCalc asoschisi va dasturchi muhandisi</div>
+                    <div className="text-[11px] text-[var(--muted)] mt-1">Powered by Toirov Azizbek</div>
                   </div>
                 </div>
 
@@ -815,34 +815,33 @@ export default function GeoCalcApp() {
                     { href:"tel:+998958300142", icon:Phone, label:"Telefon", value:"+998 95 830-01-42", color:"var(--warning)" },
                   ].map(c=>(
                     <a key={c.label} href={c.href} target={c.href.startsWith("http")?"_blank":undefined} rel="noreferrer"
-                      className="p-4 rounded-[20px] bg-[var(--panel-raised)] border border-[var(--border)] hover:border-[var(--accent)] flex flex-col items-center text-center group transition-all">
-                      <div className="w-10 h-10 rounded-[14px] bg-[var(--accent-soft)] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform" style={{color:c.color}}>
+                      className="p-5 rounded-[24px] liquid-pill flex flex-col items-center text-center group transition-all">
+                      <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform shadow-md" style={{color:c.color}}>
                         <c.icon className="w-5 h-5" />
                       </div>
-                      <div className="text-[10px] text-[var(--muted)] uppercase font-bold">{c.label}</div>
-                      <div className="text-xs font-semibold text-[var(--text)] mt-0.5 break-all">{c.value}</div>
+                      <div className="text-[10px] text-[var(--muted)] uppercase font-black">{c.label}</div>
+                      <div className="text-xs font-bold text-[var(--text)] mt-1 break-all">{c.value}</div>
                     </a>
                   ))}
                 </div>
-              </IosCard>
+              </LiquidCard>
             </div>
           )}
 
           {/* ──────────── MODULE: GUIDE ──────────── */}
           {activeModule==="guide" && (
-            <div className="max-w-3xl">
-              <SectionHeader title={<><Info className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Qo'llanma","Справка","Guide")}</>} />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="max-w-3xl space-y-6">
+              <SectionHeader title={<><Info className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Qo'llanma va Formulalar","Справка и формулы","User Guide & Formulas")}</>} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
-                  {t:"1. Maydon — WGS84 & UTM",c:"WGS84 koordinatalar UTM 41N/42N/43N zonalariga proyeksiyalanib Gauss-Krüger formulasi orqali hisoblanadi.",col:"accent"},
-                  {t:"2. Vincenty Masofa",c:"Ellipsoidal formula orqali 0.5 mm aniqlikda geodezik masofa, azimut va rumb hisoblanadi.",col:"blue"},
-                  {t:"3. TIN Cut & Fill",c:"Delaunay triangulyatsiyasi (TIN) orqali yer relyefi 3D prizmalarga ajratiladi.",col:"warning"},
-                  {t:"4. GeoAI — Multimodal AI",c:"Gemini API orqali istalgan savol, rasm va fayl tahlili. Vercel'da GEMINI_API_KEY kerak.",col:"accent"},
+                  {t:"1. Maydon — WGS84 & UTM",c:"WGS84 koordinatalari UTM 41N/42N/43N zonalariga proyeksiyalanib, Gauss-Krüger formulasi orqali hisoblanadi.",col:"accent"},
+                  {t:"2. Vincenty Masofa va Azimut",c:"Ellipsoidal formula orqali ikki nuqta orasidagi masofa va azimut 0.5 mm aniqlikda hisoblanadi.",col:"blue"},
+                  {t:"3. TIN Cut & Fill Hajmi",c:"Delaunay triangulyatsiyasi orqali tuproq qazish va to'kish hajmi 3D prizmalar yordamida aniqlanadi.",col:"warning"},
                 ].map(g=>(
-                  <IosCard key={g.t} className="p-5 space-y-2">
-                    <div className={`text-sm font-bold ${g.col==="accent"?"text-[var(--accent)]":g.col==="blue"?"text-[var(--blue)]":"text-[var(--warning)]"}`}>{g.t}</div>
-                    <p className="text-xs text-[var(--muted)] leading-relaxed">{g.c}</p>
-                  </IosCard>
+                  <LiquidCard key={g.t} className="p-6 space-y-2">
+                    <div className={`text-sm font-black ${g.col==="accent"?"text-[var(--accent)]":g.col==="blue"?"text-[var(--blue)]":"text-[var(--warning)]"}`}>{g.t}</div>
+                    <p className="text-xs text-[var(--muted)] leading-relaxed font-medium">{g.c}</p>
+                  </LiquidCard>
                 ))}
               </div>
             </div>
@@ -850,48 +849,50 @@ export default function GeoCalcApp() {
 
           {/* ──────────── MODULE: HISTORY ──────────── */}
           {activeModule==="history" && (
-            <div className="max-w-3xl">
-              <div className="flex items-center justify-between mb-5">
-                <SectionHeader title={<><History className="inline w-5 h-5 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Hisob tarixi","История","History")}</>} />
+            <div className="max-w-3xl space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <SectionHeader title={<><History className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Hisob-kitoblar tarixi","История расчётов","Calculations History")}</>} />
                 {historyList.length>0 && (
                   <button onClick={()=>{setHistoryList([]);localStorage.removeItem("geocalc_history");showToast("Tarix tozalandi!");}}
-                    className="px-3 py-1.5 rounded-[12px] bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-xs text-[var(--danger)] font-semibold">{tr(language,"Tozalash","Очистить","Clear")}</button>
+                    className="px-4 py-2 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-xs text-[var(--danger)] font-bold">{tr(language,"Tozalash","Очистить","Clear")}</button>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {historyList.length>0 ? historyList.map(item=>(
-                  <div key={item.id} className="px-4 py-3.5 rounded-[20px] bg-[var(--panel)]/70 border border-[var(--border)] backdrop-blur-xl flex items-center justify-between gap-3">
+                  <div key={item.id} className="px-5 py-4 rounded-full liquid-pill flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-bold text-[var(--accent)] uppercase">{item.title}</div>
+                      <div className="text-[10px] font-black text-[var(--accent)] uppercase">{item.title}</div>
                       <div className="text-sm font-bold text-[var(--text)] font-mono mt-0.5">{item.value}</div>
                     </div>
-                    <div className="text-[10px] text-[var(--muted-2)] flex-shrink-0">{item.time}</div>
+                    <div className="text-[11px] text-[var(--muted-2)] font-mono flex-shrink-0">{item.time}</div>
                   </div>
                 )) : (
-                  <div className="p-10 rounded-[24px] bg-[var(--panel)]/60 border border-[var(--border)] text-center text-sm text-[var(--muted)]">
-                    {tr(language,"Hali hech qanday hisob yo'q","История пуста","No history yet")}
-                  </div>
+                  <LiquidCard className="p-12 text-center text-sm text-[var(--muted)] font-medium">
+                    {tr(language,"Hali hech qanday hisob-kitob saqlanmagan","История пуста","No history yet")}
+                  </LiquidCard>
                 )}
               </div>
             </div>
           )}
 
-          </div>{/* end module content */}
+          </div>
 
-          {/* ── FOOTER ─────────────────────────────────────────────────── */}
-          <footer className="mt-auto px-6 py-8 border-t border-[var(--border)] flex flex-col items-center gap-3 text-center">
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--muted)] font-medium">
+          {/* ── FOOTER (POWERED BY TOIROV AZIZBEK) ─────────────────────────── */}
+          <footer className="mt-12 px-6 py-8 border-t border-white/10 flex flex-col items-center gap-3 text-center">
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--muted)] font-semibold">
               <a href="mailto:deartairov@gmail.com" className="hover:text-[var(--accent)] transition-colors flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5 text-[var(--accent)]" /> deartairov@gmail.com
               </a>
+              <span>·</span>
               <a href="https://t.me/dearr5" target="_blank" rel="noreferrer" className="hover:text-[var(--blue)] transition-colors flex items-center gap-1.5">
                 <Send className="w-3.5 h-3.5 text-[var(--blue)]" /> @dearr5
               </a>
+              <span>·</span>
               <a href="tel:+998958300142" className="hover:text-[var(--warning)] transition-colors flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-[var(--warning)]" /> +998 95 830-01-42
               </a>
             </div>
-            <div className="text-sm font-bold text-[var(--text)]">
+            <div className="text-sm font-black text-[var(--text)]">
               Powered by <span className="text-[var(--accent)]">Toirov Azizbek</span>
             </div>
             <div className="text-[11px] text-[var(--muted-2)]">

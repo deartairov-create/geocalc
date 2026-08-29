@@ -30,6 +30,9 @@ import {
   Layers,
   Layers3,
   LoaderCircle,
+  LogIn,
+  LogOut,
+  Mail,
   Map as MapIcon,
   MapPin,
   Maximize2,
@@ -37,10 +40,12 @@ import {
   Moon,
   Mountain,
   Navigation,
+  Phone,
   Plus,
   RefreshCw,
   Ruler,
   Send,
+  SendHorizontal,
   Share2,
   ShieldCheck,
   Sliders,
@@ -50,10 +55,19 @@ import {
   TrendingUp,
   Triangle,
   Upload,
+  User as UserIcon,
   WandSparkles,
   X,
   type LucideIcon,
 } from "lucide-react";
+
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { firebaseAuth, googleProvider } from "@/lib/firebase-client";
 
 import {
   CoordinateParseError,
@@ -91,15 +105,19 @@ import {
   type SimpleShapeResult,
 } from "@/lib/geodesy-advanced";
 
-import { GEOAI_CONTACT_MARKERS, type GeoAIAttachment } from "@/lib/geoai";
+import {
+  GEOAI_CONTACT_TEXT,
+  GEOAI_CONTACT_TEXT_RU,
+  GEOAI_CONTACT_TEXT_EN,
+} from "@/lib/geoai";
 
 // Dynamic import for Leaflet Map to ensure SSR-safety
 const InteractiveMap = dynamic(() => import("@/components/interactive-map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[520px] rounded-2xl bg-[var(--panel-solid)] border border-[var(--border)] flex flex-col items-center justify-center gap-3 text-[var(--muted)] animate-pulse">
+    <div className="w-full h-[520px] rounded-3xl bg-[var(--panel-solid)]/70 backdrop-blur-xl border border-[var(--border)] flex flex-col items-center justify-center gap-3 text-[var(--muted)] animate-pulse shadow-2xl">
       <Globe className="w-8 h-8 text-[var(--accent)] animate-spin" />
-      <span className="text-sm font-medium">Interfaol xarita yuklanmoqda...</span>
+      <span className="text-sm font-medium">Sun'iy yo‘ldosh xaritasi yuklanmoqda...</span>
     </div>
   ),
 });
@@ -120,7 +138,8 @@ type ModuleId =
   | "volume"
   | "geoai"
   | "guide"
-  | "history";
+  | "history"
+  | "contacts";
 
 type HistoryRecord = {
   id: string;
@@ -203,9 +222,15 @@ function getNavItems(language: AppLanguage): NavItem[] {
     {
       id: "geoai",
       label: tr(language, "GeoAI yordamchi", "GeoAI ассистент", "GeoAI assistant"),
-      hint: tr(language, "Savol-javob · Maslahat", "Консультация", "AI Geodesy chat"),
+      hint: tr(language, "Sun'iy intellekt maslahati", "AI Консультация", "AI Geodesy chat"),
       icon: Sparkles,
       badge: "AI",
+    },
+    {
+      id: "contacts",
+      label: tr(language, "Bog‘lanish", "Контакты", "Contacts"),
+      hint: tr(language, "Muallif kontaktlari", "Связь с автором", "Author contacts"),
+      icon: Phone,
     },
     {
       id: "guide",
@@ -228,6 +253,10 @@ export default function GeoCalcApp() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
+
+  // Firebase Auth State
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // 1. Area Module State
   const [areaInput, setAreaInput] = useState<string>(AREA_SAMPLE);
@@ -255,8 +284,6 @@ export default function GeoCalcApp() {
   // 3. Converter State
   const [convLatDec, setConvLatDec] = useState("41.311081");
   const [convLonDec, setConvLonDec] = useState("69.240562");
-  const [convLatDms, setConvLatDms] = useState({ deg: "41", min: "18", sec: "39.89", hemi: "N" });
-  const [convLonDms, setConvLonDms] = useState({ deg: "69", min: "14", sec: "26.02", hemi: "E" });
   const [convBatchText, setConvBatchText] = useState(AREA_SAMPLE);
   const [convBatchResult, setConvBatchResult] = useState<string>("");
 
@@ -306,9 +333,9 @@ export default function GeoCalcApp() {
       role: "bot",
       text: tr(
         language,
-        "Assalomu alaykum! Men GeoCalc sun'iy intellekt muhandislik yordamchisiman. Geodeziya, topografiya, koordinatalar, yer ishlari va hisob-kitoblar bo‘yicha savollaringiz bo‘lsa marhamat!",
-        "Здравствуйте! Я AI ассистент GeoCalc. Готов ответить на вопросы по геодезии, съёмке, координатам и земляным работам.",
-        "Hello! I am your GeoCalc AI assistant. Ask me anything about geodesy, coordinates, leveling, and calculations.",
+        "Assalomu alaykum! Men GeoAI — GeoCalc platformasining sun'iy intellekt muhandislik yordamchisiman. Geodeziya, topografiya, yer maydoni, koordinatalar, yer ishlari va hisob-kitoblar bo‘yicha savollaringizga to‘liq va professional javob beraman.",
+        "Здравствуйте! Я GeoAI — AI ассистент платформы GeoCalc. Отвечу на любые вопросы по геодезии, съёмке, координатам и земляным работам.",
+        "Hello! I am GeoAI — your AI engineering assistant on GeoCalc. I provide expert solutions for geodesy, land survey, coordinates, and earthwork calculations.",
       ),
     },
   ]);
@@ -320,6 +347,38 @@ export default function GeoCalcApp() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  // Auth Listener
+  useEffect(() => {
+    try {
+      const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+        setCurrentUser(user);
+        setIsAuthLoading(false);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(firebaseAuth, googleProvider);
+      showToast(tr(language, "Google orqali kirdingiz!", "Вход через Google выполнен!", "Signed in with Google!"));
+    } catch (err: any) {
+      console.error("Auth error", err);
+      showToast(err.message || "Kirishda xatolik yuz berdi");
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(firebaseAuth);
+      showToast(tr(language, "Tizimdan chiqildi", "Вы вышли из системы", "Signed out"));
+    } catch (err: any) {
+      console.error("Sign out error", err);
+    }
   };
 
   // Theme switch effect
@@ -415,19 +474,6 @@ export default function GeoCalcApp() {
     }
   };
 
-  // Converter Calculations
-  const handleConvertDecToDms = () => {
-    try {
-      const lat = Number(convLatDec);
-      const lon = Number(convLonDec);
-      const dmsLat = toDMS(lat, "lat");
-      const dmsLon = toDMS(lon, "lon");
-      showToast(`${dmsLat} | ${dmsLon}`);
-    } catch (e: any) {
-      showToast("Xato qiymat");
-    }
-  };
-
   // Batch Converter
   const handleBatchConvert = () => {
     try {
@@ -505,65 +551,116 @@ export default function GeoCalcApp() {
     }
   };
 
-  // GeoAI Chat Send
-  const handleSendChat = () => {
-    if (!chatInput.trim()) return;
+  // GeoAI Chat Send (Supports Vercel API with graceful local fallback)
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || isChatLoading) return;
     const userMsg = chatInput.trim();
     setChatMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setChatInput("");
     setIsChatLoading(true);
 
+    try {
+      // 1. Attempt API call to /api/geoai
+      const token = currentUser ? await currentUser.getIdToken().catch(() => null) : null;
+      const res = await fetch("/api/geoai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: userMsg,
+          history: chatMessages.slice(-8).map((m) => ({
+            role: m.role === "user" ? "user" : "assistant",
+            content: m.text,
+          })),
+          language,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.answer) {
+          setChatMessages((prev) => [...prev, { role: "bot", text: data.answer }]);
+          setIsChatLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("GeoAI API endpoint offline or key pending, switching to built-in knowledge", err);
+    }
+
+    // 2. Built-in Instant AI Knowledge Response (Full Geodesy & Contact Support)
     setTimeout(() => {
       let reply = "";
       const lower = userMsg.toLowerCase();
 
-      if (lower.includes("sotix") || lower.includes("gektar") || lower.includes("yuza")) {
+      if (lower.includes("kontakt") || lower.includes("aloqa") || lower.includes("bog'lanish") || lower.includes("author") || lower.includes("telefon")) {
         reply = tr(
           language,
-          "1 Sotix (Ar) = 100 m² ga teng. 1 Gektar (ha) = 10,000 m² = 100 sotix. 1 km² = 100 gektar = 1,000,000 m². GeoCalc 'Yuza hisoblash' bo‘limida WGS84 koordinatalari orqali avtomatik tarzda Gauss-Krüger (UTM) proyeksiyasida eng yuqori aniqlikda maydonni hisoblaydi.",
-          "1 сотка (ар) = 100 м². 1 гектар (га) = 10 000 м² = 100 соток. В разделе «Расчёт площади» GeoCalc вычисляет площадь через геодезическую проекцию Гаусса-Крюгера.",
-          "1 Sotix (Ar) = 100 m². 1 Hectare = 10,000 m² = 100 sotix. GeoCalc computes high-precision geodesic polygon areas using localized UTM projection.",
+          `Muallif bilan bog‘lanish va takliflar uchun kontaktlar:\n\n📧 Email: deartairov@gmail.com\n💬 Telegram: @dearr5\n📞 Telefon: +998(95) 830-01-42\n\nPowered by Toirov Azizbek`,
+          `Контакты для связи и предложений:\n\n📧 Email: deartairov@gmail.com\n💬 Telegram: @dearr5\n📞 Телефон: +998(95) 830-01-42\n\nPowered by Toirov Azizbek`,
+          `Author and support contacts:\n\n📧 Email: deartairov@gmail.com\n💬 Telegram: @dearr5\n📞 Phone: +998(95) 830-01-42\n\nPowered by Toirov Azizbek`,
         );
-      } else if (lower.includes("cut") || lower.includes("fill") || lower.includes("hajm")) {
+      } else if (lower.includes("sotix") || lower.includes("gektar") || lower.includes("yuza") || lower.includes("maydon")) {
         reply = tr(
           language,
-          "Cut & Fill (Qazish va to‘kish) yer tekislash ishlarida relef balandliklarini loyiha balandligiga moslash uchun ishlatiladi. Delaunay triangulyatsiyasi (TIN) orqali relyef prizmalarga bo‘linadi va qaziladigan hamda to‘kiladigan tuproq hajmi m³ da hisoblanadi.",
-          "Расчёт Cut & Fill делит рельеф на призмы методом триангуляции Делоне (TIN) для точного вычисления объёма выемки и насыпи в кубических метрах.",
-          "Cut & Fill calculation uses Delaunay Triangulation (TIN) to compute exact earthwork volumes for excavation and embankment in cubic meters.",
+          "1 Sotix (Ar) = 100 m² ga teng.\n1 Gektar (ha) = 10,000 m² = 100 sotix.\n1 km² = 100 gektar = 1,000,000 m².\n\nGeoCalc 'Yuza hisoblash' va 'Interfaol xarita' bo‘limlarida WGS84 koordinatalarini Gauss-Krüger (UTM 41N, 42N, 43N) proyeksiyalariga aylantirib, eng yuqori aniqlikda maydonni hisoblab beradi.",
+          "1 сотка (ар) = 100 м².\n1 гектар (га) = 10 000 м² = 100 соток.\n1 км² = 100 га = 1 000 000 м².\n\nGeoCalc переводит координаты WGS84 в проекцию Гаусса-Крюгера/UTM и вычисляет точную геодезическую площадь.",
+          "1 Sotix (Ar) = 100 m².\n1 Hectare (ha) = 10,000 m² = 100 sotix.\n1 km² = 100 hectares = 1,000,000 m².\n\nGeoCalc transforms WGS84 coordinates to local UTM zones for geodetic-grade area computations.",
         );
-      } else if (lower.includes("azimut") || lower.includes("rumb")) {
+      } else if (lower.includes("cut") || lower.includes("fill") || lower.includes("hajm") || lower.includes("tuproq")) {
         reply = tr(
           language,
-          "Azimut — shimoliy yo‘nalishdan soat mili bo‘yicha o‘lchanadigan burchak (0° dan 360° gacha). Rumb esa eng yaqin meridian (Shimol yoki Janub)dan o‘lchanadigan 0° dan 90° gacha burchak bo‘lib, 4 chorakka (NE, SE, SW, NW) bo‘linadi.",
-          "Азимут измеряется от севера по часовой стрелке (0°–360°). Румб — острый угол от ближайшего меридиана (0°–90°) с указанием четверти (СВ, ЮВ, ЮЗ, СЗ).",
-          "Azimuth is measured clockwise from True North (0°–360°). Rhumb (bearing) is measured 0°–90° from North or South within 4 quadrants.",
+          "Cut & Fill (Qazish va to‘kish) yer tekislash ishlarida relef balandliklarini loyiha balandligiga moslash uchun ishlatiladi.\n\nDelaunay triangulyatsiyasi (TIN) orqali yer relyefi 3D prizmalarga ajratiladi va qaziladigan (Cut) hamda to‘kiladigan (Fill) tuproq hajmi m³ da hisoblanadi.",
+          "Расчёт объёма Cut & Fill делит рельеф на 3D-призмы методом триангуляции Делоне (TIN) для точного вычисления выемки и насыпи грунта в м³.",
+          "Cut & Fill calculation uses Delaunay Triangulation (TIN) to compute 3D prism volumes for excavation and embankment in cubic meters.",
+        );
+      } else if (lower.includes("azimut") || lower.includes("rumb") || lower.includes("masofa")) {
+        reply = tr(
+          language,
+          "Azimut — shimoliy yo‘nalishdan soat mili bo‘yicha o‘lchanadigan burchak (0° dan 360° gacha).\nRumb esa eng yaqin meridian (Shimol yoki Janub)dan 0° dan 90° gacha burchak bo‘lib, 4 ta chorakka (NE, SE, SW, NW) bo‘linadi.\n\nGeoCalc Vincenty formulasi orqali 0.5 mm aniqlikda masofa va azimutni hisoblaydi.",
+          "Азимут измеряется от севера по часовой стрелке (0°–360°). Румб — угол от ближайшего меридиана (0°–90°) в четвертях СВ, ЮВ, ЮЗ, СЗ.\n\nGeoCalc вычисляет расстояние по формуле Винсенти с точностью до 0.5 мм.",
+          "Azimuth is measured clockwise from True North (0°–360°). Bearing (Rhumb) is measured 0°–90° from North or South within NE, SE, SW, NW quadrants.",
         );
       } else {
         reply = tr(
           language,
-          `Savolingiz uchun rahmat! "${userMsg}" bo‘yicha: GeoCalc sizga yer maydoni, masofa, azimut, nivelirlash, nishablik, koordinata konvertatsiyasi va hajm hisoblashda 100% aniqlikni ta'minlaydi.`,
-          `Спасибо за вопрос! По вашему запросу: GeoCalc обеспечивает полный спектр геодезических вычислений площади, расстояний, нивелирования и объёмов.`,
-          `Thank you! GeoCalc provides precision geodetic computation for areas, distances, azimuths, leveling, coordinates, and earthwork volumes.`,
+          `GeoAI savolingizni qabul qildi: "${userMsg}".\n\nGeoCalc platformasi yordamida WGS84 koordinatalar, yer maydoni, masofalar, azimut, nivelirlash, nishablik va yer ishlari hajmini to‘liq hisoblashingiz mumkin.`,
+          `GeoAI принял ваш запрос: "${userMsg}".\n\nGeoCalc обеспечивает высокоточные расчёты координат WGS84, площадей, расстояний, нивелирования и объёмов.`,
+          `GeoAI received your request: "${userMsg}".\n\nGeoCalc provides full engineering computations for areas, coordinates, distances, leveling, and volumes.`,
         );
       }
 
-      setChatMessages((prev) => [...prev, { role: "bot", text: reply }]);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          text: `${reply}\n\n---\n📧 deartairov@gmail.com · 💬 @dearr5 · 📞 +998(95)830-01-42\nPowered by Toirov Azizbek`,
+        },
+      ]);
       setIsChatLoading(false);
-    }, 600);
+    }, 500);
   };
 
   const navItems = getNavItems(language);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)] selection:text-black font-sans">
+    <div className="min-h-[100dvh] flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)] selection:text-black font-sans relative overflow-x-hidden">
+      {/* Background Luxury Ambient Glows */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] rounded-full bg-[var(--accent)]/10 blur-[130px]" />
+        <div className="absolute bottom-[-10%] right-[10%] w-[600px] h-[600px] rounded-full bg-[var(--blue)]/10 blur-[150px]" />
+      </div>
+
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-xl bg-[var(--panel-solid)] text-[var(--accent)] border border-[var(--border-strong)] shadow-2xl font-semibold text-xs flex items-center gap-2 backdrop-blur-lg"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] px-5 py-3 rounded-2xl bg-[var(--panel-solid)]/90 text-[var(--accent)] border border-[var(--border-strong)] shadow-2xl font-bold text-xs flex items-center gap-2.5 backdrop-blur-2xl"
           >
             <Check className="w-4 h-4 text-[var(--accent)]" />
             {toastMessage}
@@ -571,38 +668,86 @@ export default function GeoCalcApp() {
         )}
       </AnimatePresence>
 
-      {/* Main App Layout */}
-      <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1700px] mx-auto">
-        {/* Left Sidebar */}
+      {/* Main App Container */}
+      <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1750px] mx-auto z-10">
+        {/* Left Sidebar (Glassmorphism) */}
         <aside
-          className={`w-full md:w-[280px] lg:w-[310px] flex-shrink-0 bg-[var(--sidebar)] border-r border-[var(--border)] p-4 flex flex-col justify-between ${
+          className={`w-full md:w-[290px] lg:w-[320px] flex-shrink-0 bg-[var(--sidebar)] backdrop-blur-2xl border-r border-[var(--border)] p-4 flex flex-col justify-between transition-all ${
             isSidebarOpen ? "block" : "hidden md:flex"
           }`}
         >
           <div>
-            {/* Logo & Brand */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border)]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-[var(--accent)] flex items-center justify-center text-black font-extrabold text-lg shadow-lg">
-                  <Globe className="w-6 h-6" />
+            {/* Logo & Brand Header */}
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-black font-extrabold text-xl shadow-lg shadow-[var(--accent)]/20">
+                  <Globe className="w-6 h-6 text-black" />
                 </div>
                 <div>
                   <h1 className="font-extrabold text-lg tracking-tight flex items-center gap-1.5 text-[var(--text)]">
-                    GeoCalc <span className="text-[var(--accent)] text-xs font-bold px-1.5 py-0.5 rounded-md bg-[var(--accent-soft)]">PRO</span>
+                    GeoCalc <span className="text-[var(--accent)] text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--accent-soft)] border border-[var(--border-strong)]">PRO</span>
                   </h1>
                   <p className="text-[11px] text-[var(--muted)] font-medium">
-                    Geodeziya & Yer kalkulyatori
+                    Geodeziya & GeoAI Platformasi
                   </p>
                 </div>
               </div>
 
-              {/* Close on mobile */}
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="md:hidden p-1.5 rounded-lg text-[var(--muted)] hover:text-[var(--text)]"
+                className="md:hidden p-1.5 rounded-xl text-[var(--muted)] hover:text-[var(--text)]"
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* User Profile / Google Auth Box */}
+            <div className="mb-4 p-3 rounded-2xl bg-[var(--panel)]/70 border border-[var(--border)] backdrop-blur-lg">
+              {isAuthLoading ? (
+                <div className="flex items-center gap-2 text-xs text-[var(--muted)] animate-pulse">
+                  <LoaderCircle className="w-4 h-4 animate-spin" /> Tekshirilmoqda...
+                </div>
+              ) : currentUser ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt="Avatar"
+                        className="w-8 h-8 rounded-full border border-[var(--accent)] object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center font-bold text-xs">
+                        {currentUser.displayName?.[0] || "U"}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-[var(--text)] truncate">
+                        {currentUser.displayName || "Foydalanuvchi"}
+                      </div>
+                      <div className="text-[10px] text-[var(--muted-2)] truncate">
+                        {currentUser.email}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleSignOut}
+                    title="Chiqish"
+                    className="p-1.5 rounded-lg text-[var(--muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGoogleSignIn}
+                  className="w-full py-2 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[var(--accent)] hover:text-black border border-[var(--border-strong)] text-xs font-bold text-[var(--text)] transition-all flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <LogIn className="w-4 h-4 text-[var(--accent)] group-hover:text-black" />
+                  Google orqali kirish
+                </button>
+              )}
             </div>
 
             {/* Navigation List */}
@@ -617,10 +762,10 @@ export default function GeoCalcApp() {
                       setActiveModule(item.id);
                       setIsSidebarOpen(false);
                     }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all group ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-between transition-all group ${
                       isActive
-                        ? "bg-[var(--accent)] text-black font-bold shadow-md shadow-[var(--accent)]/10"
-                        : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-raised)]"
+                        ? "bg-gradient-to-r from-[var(--accent)] to-[var(--accent-strong)] text-black font-extrabold shadow-lg shadow-[var(--accent)]/15"
+                        : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-raised)]/80"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -649,16 +794,16 @@ export default function GeoCalcApp() {
             </nav>
           </div>
 
-          {/* Footer Controls: Language & Theme */}
+          {/* Footer Controls: Language & Theme Switcher */}
           <div className="pt-4 border-t border-[var(--border)] mt-4 space-y-3">
             <div className="flex items-center justify-between">
               {/* Language Switch */}
-              <div className="flex items-center bg-[var(--panel-solid)] border border-[var(--border)] rounded-lg p-0.5 text-[11px] font-bold">
+              <div className="flex items-center bg-[var(--panel-solid)] border border-[var(--border)] rounded-xl p-0.5 text-[11px] font-bold">
                 {(["uz", "ru", "en"] as AppLanguage[]).map((l) => (
                   <button
                     key={l}
                     onClick={() => setLanguage(l)}
-                    className={`px-2.5 py-1 rounded-md uppercase transition-all ${
+                    className={`px-2.5 py-1 rounded-lg uppercase transition-all ${
                       language === l
                         ? "bg-[var(--accent)] text-black shadow-sm"
                         : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -669,38 +814,48 @@ export default function GeoCalcApp() {
                 ))}
               </div>
 
-              {/* Theme Toggle */}
+              {/* Day / Night Theme Toggle */}
               <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="p-2 rounded-lg bg-[var(--panel-solid)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)] transition-all"
-                title="Mavzuni o‘zgartirish"
+                className="p-2.5 rounded-xl bg-[var(--panel-solid)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)] transition-all flex items-center gap-1.5 text-xs font-semibold"
+                title="Kun / Tun rejimi"
               >
-                {theme === "dark" ? <Sun className="w-4 h-4 text-[var(--warning)]" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
+                {theme === "dark" ? (
+                  <>
+                    <Sun className="w-4 h-4 text-[var(--warning)]" />
+                    <span className="text-[10px]">Kun</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-4 h-4 text-[var(--blue)]" />
+                    <span className="text-[10px]">Tun</span>
+                  </>
+                )}
               </button>
             </div>
 
             <div className="text-[10px] text-[var(--muted-2)] text-center font-medium">
-              GeoCalc Modern v2.1 · WGS84 & UTM 41-43N
+              Powered by <strong className="text-[var(--accent)]">Toirov Azizbek</strong>
             </div>
           </div>
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-[var(--bg-deep)] p-3 md:p-6 lg:p-8 overflow-y-auto">
+        <main className="flex-1 flex flex-col min-w-0 bg-[var(--bg-deep)]/80 backdrop-blur-md p-3 md:p-6 lg:p-8 overflow-y-auto">
           {/* Top Mobile Bar */}
           <div className="md:hidden flex items-center justify-between pb-4 mb-4 border-b border-[var(--border)]">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 rounded-xl bg-[var(--panel)] border border-[var(--border)] text-[var(--text)]"
+              className="p-2.5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] shadow-sm"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="font-bold text-sm text-[var(--text)] flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-[var(--accent)]" /> GeoCalc
+            <span className="font-extrabold text-sm text-[var(--text)] flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-[var(--accent)]" /> GeoCalc PRO
             </span>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="p-2 rounded-xl bg-[var(--panel)] border border-[var(--border)] text-[var(--muted)]"
+              className="p-2.5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] text-[var(--muted)]"
             >
               {theme === "dark" ? <Sun className="w-4 h-4 text-[var(--warning)]" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
             </button>
@@ -711,7 +866,6 @@ export default function GeoCalcApp() {
           {/* ========================================================================= */}
           {activeModule === "area" && (
             <div className="space-y-6">
-              {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] tracking-tight flex items-center gap-2">
@@ -728,12 +882,11 @@ export default function GeoCalcApp() {
                   </p>
                 </div>
 
-                {/* View Switcher */}
-                <div className="flex items-center gap-1 bg-[var(--panel)] border border-[var(--border)] p-1 rounded-xl">
+                <div className="flex items-center gap-1 bg-[var(--panel)]/80 border border-[var(--border)] p-1 rounded-2xl backdrop-blur-xl">
                   <button
                     onClick={() => setAreaViewMode("map")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                      areaViewMode === "map" ? "bg-[var(--accent)] text-black shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                      areaViewMode === "map" ? "bg-[var(--accent)] text-black shadow-md" : "text-[var(--muted)] hover:text-[var(--text)]"
                     }`}
                   >
                     <MapIcon className="w-3.5 h-3.5" />
@@ -741,8 +894,8 @@ export default function GeoCalcApp() {
                   </button>
                   <button
                     onClick={() => setAreaViewMode("canvas")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                      areaViewMode === "canvas" ? "bg-[var(--accent)] text-black shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                      areaViewMode === "canvas" ? "bg-[var(--accent)] text-black shadow-md" : "text-[var(--muted)] hover:text-[var(--text)]"
                     }`}
                   >
                     <Layers3 className="w-3.5 h-3.5" />
@@ -751,15 +904,14 @@ export default function GeoCalcApp() {
                 </div>
               </div>
 
-              {/* Grid: Coordinates input and Map View */}
+              {/* Grid: Input + Map */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left Column: Text Input & Fast Actions */}
                 <div className="lg:col-span-5 space-y-4">
-                  <div className="p-4 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-3">
+                  <div className="p-5 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
                         <MapPin className="w-4 h-4 text-[var(--accent)]" />
-                        {tr(language, "Koordinatalar ro‘yxati (Kenglik Uzunlik)", "Список координат (Широта Долгота)", "Coordinates (Lat Lon)")}
+                        {tr(language, "Koordinatalar ro‘yxati (Kenglik Uzunlik)", "Список координат", "Coordinates List")}
                       </label>
                       <span className="text-[10px] font-mono text-[var(--muted)]">
                         {areaPoints.length} {tr(language, "ta nuqta", "точек", "points")}
@@ -771,11 +923,11 @@ export default function GeoCalcApp() {
                       value={areaInput}
                       onChange={(e) => setAreaInput(e.target.value)}
                       placeholder="41.311081 69.240562&#10;41.311081 69.241562&#10;41.310281 69.241562"
-                      className="w-full p-3 rounded-xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] transition-all resize-y"
+                      className="w-full p-3.5 rounded-2xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] transition-all resize-y"
                     />
 
                     {areaError && (
-                      <div className="p-2.5 rounded-lg bg-[var(--danger-soft)] border border-[var(--danger)] text-[var(--danger)] text-xs font-medium">
+                      <div className="p-3 rounded-xl bg-[var(--danger-soft)] border border-[var(--danger)] text-[var(--danger)] text-xs font-medium">
                         {areaError}
                       </div>
                     )}
@@ -783,13 +935,13 @@ export default function GeoCalcApp() {
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         onClick={() => setAreaInput(AREA_SAMPLE)}
-                        className="px-3 py-1.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--border)] text-xs text-[var(--muted)] hover:text-[var(--text)] transition-all"
+                        className="px-3 py-1.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--border)] text-xs text-[var(--muted)] hover:text-[var(--text)] transition-all"
                       >
-                        {tr(language, "Namuna yuklash", "Пример", "Load Sample")}
+                        {tr(language, "Namuna", "Пример", "Sample")}
                       </button>
                       <button
                         onClick={() => setAreaInput("")}
-                        className="px-3 py-1.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--border)] text-xs text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all"
+                        className="px-3 py-1.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--border)] text-xs text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all"
                       >
                         {tr(language, "Tozalash", "Очистить", "Clear")}
                       </button>
@@ -798,7 +950,7 @@ export default function GeoCalcApp() {
                           navigator.clipboard.writeText(areaInput);
                           showToast(tr(language, "Koordinatalar nusxalandi!", "Скопировано!", "Copied!"));
                         }}
-                        className="ml-auto px-3 py-1.5 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] font-semibold text-xs hover:bg-[var(--accent)] hover:text-black transition-all flex items-center gap-1"
+                        className="ml-auto px-3.5 py-1.5 rounded-xl bg-[var(--accent-soft)] text-[var(--accent)] font-bold text-xs hover:bg-[var(--accent)] hover:text-black transition-all flex items-center gap-1"
                       >
                         <Copy className="w-3.5 h-3.5" />
                         {tr(language, "Nusxalash", "Копировать", "Copy")}
@@ -806,48 +958,46 @@ export default function GeoCalcApp() {
                     </div>
                   </div>
 
-                  {/* Summary Metric Cards */}
-                  {areaProperties ? (
+                  {areaProperties && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--border)]">
+                      <div className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl">
                         <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Maydon (m²)</div>
                         <div className="text-lg font-black text-[var(--accent)] mt-0.5">
                           {formatNumber(areaProperties.areaM2)} m²
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--border)]">
+                      <div className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl">
                         <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Sotix (Ar)</div>
                         <div className="text-lg font-black text-[var(--text)] mt-0.5">
                           {areaProperties.areaSotix.toFixed(2)} sotix
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--border)]">
+                      <div className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl">
                         <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Gektar (ha)</div>
                         <div className="text-lg font-black text-[var(--text)] mt-0.5">
                           {areaProperties.areaHectares.toFixed(4)} ga
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--border)]">
+                      <div className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl">
                         <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Perimetr</div>
                         <div className="text-sm font-black text-[var(--blue)] mt-0.5">
                           {areaProperties.perimeterMeters.toFixed(1)} m
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--border)] col-span-2">
-                        <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Markaziy nuqta (Centroid)</div>
+                      <div className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl col-span-2">
+                        <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Centroid Koordinatasi</div>
                         <div className="text-xs font-mono font-bold text-[var(--text)] mt-0.5">
                           {areaProperties.centroid.lat.toFixed(6)}°, {areaProperties.centroid.lon.toFixed(6)}°
                         </div>
                       </div>
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
-                {/* Right Column: Visualizer (Map or Canvas) */}
                 <div className="lg:col-span-7">
                   {areaViewMode === "map" ? (
                     <InteractiveMap
@@ -857,18 +1007,12 @@ export default function GeoCalcApp() {
                       height="540px"
                     />
                   ) : (
-                    <div className="p-4 rounded-2xl bg-[var(--panel)] border border-[var(--border)] h-[540px] flex flex-col items-center justify-center">
-                      <p className="text-xs text-[var(--muted)] mb-3">2D Proyeksiyalangan chizma sxemasi</p>
-                      <div className="text-xs text-[var(--muted-2)]">
-                        {areaPoints.length >= 3 ? (
-                          <div className="text-center font-mono">
-                            {areaPoints.length} ta burchak nuqtasi aniqlandi.
-                            <br />
-                            Yuqoridagi "Interfaol xarita" tugmasi orqali sun'iy yo‘ldoshda ko‘ring.
-                          </div>
-                        ) : (
-                          "Sxemani ko‘rish uchun kamida 3 ta nuqta kiriting."
-                        )}
+                    <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] h-[540px] flex flex-col items-center justify-center backdrop-blur-xl text-center">
+                      <Layers3 className="w-10 h-10 text-[var(--accent)] mb-2" />
+                      <div className="text-xs text-[var(--muted)] font-mono">
+                        {areaPoints.length >= 3
+                          ? `${areaPoints.length} ta nuqta aniqlandi. Xaritada ko‘rish uchun "Interfaol xarita"ga o‘ting.`
+                          : "Kamida 3 ta koordinata kiriting."}
                       </div>
                     </div>
                   )}
@@ -878,28 +1022,21 @@ export default function GeoCalcApp() {
           )}
 
           {/* ========================================================================= */}
-          {/* MODULE 2: INTERACTIVE MAP FULL SCREEN */}
+          {/* MODULE 2: MAP */}
           {/* ========================================================================= */}
           {activeModule === "map" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
-                    <MapIcon className="w-6 h-6 text-[var(--accent)]" />
-                    {tr(language, "To‘liq ekranli Interfaol Xarita", "Интерактивная карта со спутником", "Full Interactive Satellite Map")}
-                  </h2>
-                  <p className="text-xs text-[var(--muted)] mt-1">
-                    {tr(
-                      language,
-                      "Sun'iy yo‘ldosh tasvirlarida yer chegaralarini o‘lchang, masofalarni hisoblang va nuqtalarni aniqlang.",
-                      "Измеряйте границы участков, расстояния и определяйте координаты на спутниковых снимках.",
-                      "Measure plot boundaries, distances, and pin coordinates on satellite imagery.",
-                    )}
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
+                  <MapIcon className="w-6 h-6 text-[var(--accent)]" />
+                  {tr(language, "To‘liq ekranli Sun'iy yo‘ldosh xaritasi", "Интерактивная спутниковая карта", "Full Interactive Satellite Map")}
+                </h2>
+                <p className="text-xs text-[var(--muted)] mt-1">
+                  Xaritada poligon, masofa va koordinatalarni o‘lchang.
+                </p>
               </div>
 
-              <InteractiveMap language={language} height="calc(100vh - 160px)" />
+              <InteractiveMap language={language} height="calc(100vh - 220px)" />
             </div>
           )}
 
@@ -914,68 +1051,58 @@ export default function GeoCalcApp() {
                   {tr(language, "Masofa, Azimut va Rumb hisoblash", "Расчёт расстояния, азимута и румба", "Distance, Azimuth & Bearing")}
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  {tr(
-                    language,
-                    "Vincenty ellipsoidal formulasidan foydalangan holda 2 ta geodezik nuqta orasidagi aniq masofa va yo‘nalish burchaklari.",
-                    "Высокоточный расчёт геодезического расстояния и азимутов по формуле Винсенти на эллипсоиде WGS84.",
-                    "High-precision geodetic distance and azimuth calculation via Vincenty's inverse formula on WGS84.",
-                  )}
+                  Vincenty ellipsoidal formulasi bo‘yicha 0.5 mm aniqlikdagi geodezik masofa.
                 </p>
               </div>
 
-              {/* 2 Points Input */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl">
-                {/* Point 1 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl">
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-[var(--accent)] flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    {tr(language, "1-Boshlang‘ich nuqta", "1-я Начальная точка", "Point 1 (Start)")}
+                    <MapPin className="w-4 h-4" /> 1-Boshlang‘ich nuqta
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-[var(--muted)]">Kenglik (Lat)</label>
+                      <label className="text-[10px] text-[var(--muted)]">Lat</label>
                       <input
                         type="text"
                         value={distP1.lat}
                         onChange={(e) => setDistP1({ ...distP1, lat: e.target.value })}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-[var(--muted)]">Uzunlik (Lon)</label>
+                      <label className="text-[10px] text-[var(--muted)]">Lon</label>
                       <input
                         type="text"
                         value={distP1.lon}
                         onChange={(e) => setDistP1({ ...distP1, lon: e.target.value })}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Point 2 */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-[var(--blue)] flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    {tr(language, "2-Oxirgi nuqta", "2-я Конечная точка", "Point 2 (End)")}
+                    <MapPin className="w-4 h-4" /> 2-Oxirgi nuqta
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-[var(--muted)]">Kenglik (Lat)</label>
+                      <label className="text-[10px] text-[var(--muted)]">Lat</label>
                       <input
                         type="text"
                         value={distP2.lat}
                         onChange={(e) => setDistP2({ ...distP2, lat: e.target.value })}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-[var(--muted)]">Uzunlik (Lon)</label>
+                      <label className="text-[10px] text-[var(--muted)]">Lon</label>
                       <input
                         type="text"
                         value={distP2.lon}
                         onChange={(e) => setDistP2({ ...distP2, lon: e.target.value })}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                   </div>
@@ -984,110 +1111,36 @@ export default function GeoCalcApp() {
                 <div className="md:col-span-2 pt-2">
                   <button
                     onClick={handleCalculateDistance}
-                    className="w-full py-3 rounded-xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-2xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                   >
                     <Calculator className="w-4 h-4" />
-                    {tr(language, "Masofa va Yo‘nalishni hisoblash", "Рассчитать расстояние и азимут", "Compute Distance & Azimuth")}
+                    Masofa va Azimutni hisoblash
                   </button>
                 </div>
               </div>
 
-              {/* Distance Result Display */}
               {distResult && (
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border-strong)] shadow-2xl space-y-4">
+                <div className="p-5 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border-strong)] shadow-2xl backdrop-blur-xl">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Masofa (metr)</div>
-                      <div className="text-base font-black text-[var(--accent)] mt-0.5">
-                        {distResult.distanceMeters.toFixed(2)} m
-                      </div>
+                      <div className="text-base font-black text-[var(--accent)] mt-0.5">{distResult.distanceMeters.toFixed(2)} m</div>
                     </div>
-
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Masofa (km)</div>
-                      <div className="text-base font-black text-[var(--text)] mt-0.5">
-                        {distResult.distanceKm.toFixed(3)} km
-                      </div>
+                      <div className="text-base font-black text-[var(--text)] mt-0.5">{distResult.distanceKm.toFixed(3)} km</div>
                     </div>
-
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
-                      <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Boshlang‘ich Azimut</div>
-                      <div className="text-base font-black text-[var(--blue)] mt-0.5">
-                        {distResult.initialAzimuthDeg.toFixed(2)}°
-                      </div>
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
+                      <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Azimut</div>
+                      <div className="text-base font-black text-[var(--blue)] mt-0.5">{distResult.initialAzimuthDeg.toFixed(2)}°</div>
                     </div>
-
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
-                      <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Geodezik Rumb</div>
-                      <div className="text-sm font-black text-[var(--warning)] mt-0.5 font-mono">
-                        {distResult.rhumbString}
-                      </div>
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
+                      <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Rumb</div>
+                      <div className="text-sm font-black text-[var(--warning)] mt-0.5 font-mono">{distResult.rhumbString}</div>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Direct Geodetic Problem Section */}
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
-                <h3 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-[var(--accent)]" />
-                  {tr(language, "To‘g‘ri geodezik masala (Nuqta + Azimut + Masofa → Yangi koordinata)", "Прямая геодезическая задача", "Direct Geodetic Problem")}
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Boshlang‘ich Lat, Lon</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        value={directStart.lat}
-                        onChange={(e) => setDirectStart({ ...directStart, lat: e.target.value })}
-                        className="w-1/2 p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
-                      />
-                      <input
-                        type="text"
-                        value={directStart.lon}
-                        onChange={(e) => setDirectStart({ ...directStart, lon: e.target.value })}
-                        className="w-1/2 p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Azimut (°)</label>
-                    <input
-                      type="number"
-                      value={directAzimuth}
-                      onChange={(e) => setDirectAzimuth(e.target.value)}
-                      className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Masofa (metr)</label>
-                    <input
-                      type="number"
-                      value={directDistance}
-                      onChange={(e) => setDirectDistance(e.target.value)}
-                      className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleCalculateDirect}
-                  className="px-4 py-2 rounded-xl bg-[var(--panel-raised)] border border-[var(--border-strong)] text-xs font-bold text-[var(--text)] hover:bg-[var(--accent)] hover:text-black transition-all"
-                >
-                  {tr(language, "Yangi nuqtani topish", "Найти координаты", "Calculate Target Point")}
-                </button>
-
-                {directResult && (
-                  <div className="p-3 rounded-xl bg-[var(--panel-raised)] text-xs font-mono">
-                    Natija: <strong>Lat: {directResult.lat.toFixed(6)}°</strong>,{" "}
-                    <strong>Lon: {directResult.lon.toFixed(6)}°</strong>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -1099,94 +1152,68 @@ export default function GeoCalcApp() {
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
                   <RefreshCw className="w-6 h-6 text-[var(--accent)]" />
-                  {tr(language, "Koordinatalar va Formatlar Konvertori", "Конвертер форматов координат", "Coordinate Format Converter")}
+                  Koordinatalar Konvertori
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  {tr(
-                    language,
-                    "O‘nli gradus (DD), Gradus Minut Sekund (GMS/DMS) va UTM koordinata formatlari orasida konvertatsiya.",
-                    "Перевод между десятичными градусами и форматом ГМС (градусы, минуты, секунды).",
-                    "Convert between Decimal Degrees (DD) and Degrees Minutes Seconds (DMS).",
-                  )}
+                  O‘nli gradus va Gradus Minut Sekund (GMS/DMS) orasida o‘girish.
                 </p>
               </div>
 
-              {/* Single Converter */}
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
-                <h3 className="text-xs font-bold text-[var(--accent)] uppercase">
-                  {tr(language, "Bitta nuqtani konvertatsiya qilish", "Одиночный конвертер", "Single Coordinate")}
-                </h3>
+              <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-4">
+                <h3 className="text-xs font-bold text-[var(--accent)] uppercase">Bitta nuqtani aylantirish</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">O‘nli Kenglik (Lat DD)</label>
+                    <label className="text-[10px] text-[var(--muted)] font-semibold">Lat DD</label>
                     <input
                       type="text"
                       value={convLatDec}
                       onChange={(e) => setConvLatDec(e.target.value)}
                       className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
                     />
-                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1.5">
-                      GMS: {Number.isFinite(Number(convLatDec)) ? toDMS(Number(convLatDec), "lat") : "-"}
+                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1">
+                      {Number.isFinite(Number(convLatDec)) ? toDMS(Number(convLatDec), "lat") : "-"}
                     </div>
                   </div>
-
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">O‘nli Uzunlik (Lon DD)</label>
+                    <label className="text-[10px] text-[var(--muted)] font-semibold">Lon DD</label>
                     <input
                       type="text"
                       value={convLonDec}
                       onChange={(e) => setConvLonDec(e.target.value)}
                       className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
                     />
-                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1.5">
-                      GMS: {Number.isFinite(Number(convLonDec)) ? toDMS(Number(convLonDec), "lon") : "-"}
+                    <div className="text-[11px] font-mono text-[var(--accent)] mt-1">
+                      {Number.isFinite(Number(convLonDec)) ? toDMS(Number(convLonDec), "lon") : "-"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Batch Converter */}
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
-                <h3 className="text-xs font-bold text-[var(--blue)] uppercase">
-                  {tr(language, "Ommaviy (Batch) konvertor", "Пакетный конвертер списка", "Batch Coordinates List")}
-                </h3>
+              <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-4">
+                <h3 className="text-xs font-bold text-[var(--blue)] uppercase">Ommaviy (Batch) Ro‘yxat Konvertori</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Kiruvchi ro‘yxat (Lat Lon)</label>
                     <textarea
                       rows={6}
                       value={convBatchText}
                       onChange={(e) => setConvBatchText(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs text-[var(--text)]"
+                      className="w-full p-3 rounded-2xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs"
                     />
                     <button
                       onClick={handleBatchConvert}
-                      className="mt-2 px-4 py-2 rounded-xl bg-[var(--blue)] text-white font-bold text-xs shadow-md hover:brightness-110 transition-all"
+                      className="mt-2 px-4 py-2.5 rounded-xl bg-[var(--blue)] text-white font-bold text-xs shadow-md"
                     >
-                      {tr(language, "Barchasini GMS ga o‘girish", "Конвертировать всё", "Convert All")}
+                      Barchasini GMS ga o‘girish
                     </button>
                   </div>
-
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Natija (GMS)</label>
                     <textarea
                       rows={6}
                       readOnly
                       value={convBatchResult}
-                      placeholder="Konvertatsiya natijasi bu yerda chiqadi..."
-                      className="w-full p-2.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--border)] font-mono text-xs text-[var(--accent)]"
+                      placeholder="Natijalar bu yerda chiqadi..."
+                      className="w-full p-3 rounded-2xl bg-[var(--panel-raised)] border border-[var(--border)] font-mono text-xs text-[var(--accent)]"
                     />
-                    {convBatchResult && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(convBatchResult);
-                          showToast(tr(language, "Nusxalandi!", "Скопировано!", "Copied!"));
-                        }}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--border)] text-xs text-[var(--text)] hover:text-[var(--accent)]"
-                      >
-                        Nusxalash
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1201,20 +1228,14 @@ export default function GeoCalcApp() {
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
                   <Triangle className="w-6 h-6 text-[var(--accent)]" />
-                  {tr(language, "Sodda geometrik shakllar kalkulyatori", "Калькулятор простых геометрических фигур", "Simple Shapes Geometry Calculator")}
+                  Sodda Geometrik Shakllar Kalkulyatori
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  {tr(
-                    language,
-                    "To‘g‘ri to‘rtburchak, Geron uchburchagi, trapetsiya, doira va kotlovan hajmini tezkor hisoblash.",
-                    "Быстрый расчёт прямоугольника, треугольника по Герону, трапеции, круга и объёма котлована.",
-                    "Instant calculations for rectangles, Heron triangles, trapezoids, circles, and pit excavations.",
-                  )}
+                  To‘rtburchak, Geron uchburchagi, trapetsiya, doira va kotlovan hajmi.
                 </p>
               </div>
 
-              {/* Shape Selector Tabs */}
-              <div className="flex flex-wrap gap-2 p-1.5 bg-[var(--panel)] border border-[var(--border)] rounded-2xl">
+              <div className="flex flex-wrap gap-2 p-1.5 bg-[var(--panel)]/80 border border-[var(--border)] rounded-2xl backdrop-blur-xl">
                 {[
                   { id: "rect", label: "To‘rtburchak" },
                   { id: "tri", label: "Uchburchak (Geron)" },
@@ -1228,7 +1249,7 @@ export default function GeoCalcApp() {
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                       shapeType === s.id
                         ? "bg-[var(--accent)] text-black shadow-md"
-                        : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--panel-raised)]"
+                        : "text-[var(--muted)] hover:text-[var(--text)]"
                     }`}
                   >
                     {s.label}
@@ -1236,152 +1257,125 @@ export default function GeoCalcApp() {
                 ))}
               </div>
 
-              {/* Inputs & Results Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-6 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl">
-                {/* Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl">
                 <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-[var(--text)] uppercase">O‘lchamlar</h3>
+                  <h3 className="text-xs font-bold text-[var(--text)] uppercase">O‘lchamlar (metr)</h3>
                   {shapeType === "rect" && (
                     <div className="space-y-2">
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Eni (a, metr)</label>
-                        <input
-                          type="number"
-                          value={shapeParams.w}
-                          onChange={(e) => setShapeParams({ ...shapeParams, w: Number(e.target.value) })}
-                          className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Bo‘yi (b, metr)</label>
-                        <input
-                          type="number"
-                          value={shapeParams.l}
-                          onChange={(e) => setShapeParams({ ...shapeParams, l: Number(e.target.value) })}
-                          className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
+                      <input
+                        type="number"
+                        placeholder="Eni (a)"
+                        value={shapeParams.w}
+                        onChange={(e) => setShapeParams({ ...shapeParams, w: Number(e.target.value) })}
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Bo‘yi (b)"
+                        value={shapeParams.l}
+                        onChange={(e) => setShapeParams({ ...shapeParams, l: Number(e.target.value) })}
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
                     </div>
                   )}
 
                   {shapeType === "tri" && (
                     <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">a tomon</label>
-                        <input
-                          type="number"
-                          value={shapeParams.a}
-                          onChange={(e) => setShapeParams({ ...shapeParams, a: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">b tomon</label>
-                        <input
-                          type="number"
-                          value={shapeParams.b}
-                          onChange={(e) => setShapeParams({ ...shapeParams, b: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">c tomon</label>
-                        <input
-                          type="number"
-                          value={shapeParams.c}
-                          onChange={(e) => setShapeParams({ ...shapeParams, c: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
+                      <input
+                        type="number"
+                        placeholder="a"
+                        value={shapeParams.a}
+                        onChange={(e) => setShapeParams({ ...shapeParams, a: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="b"
+                        value={shapeParams.b}
+                        onChange={(e) => setShapeParams({ ...shapeParams, b: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="c"
+                        value={shapeParams.c}
+                        onChange={(e) => setShapeParams({ ...shapeParams, c: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
                     </div>
                   )}
 
                   {shapeType === "trap" && (
                     <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Asos a</label>
-                        <input
-                          type="number"
-                          value={shapeParams.a}
-                          onChange={(e) => setShapeParams({ ...shapeParams, a: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Asos b</label>
-                        <input
-                          type="number"
-                          value={shapeParams.b}
-                          onChange={(e) => setShapeParams({ ...shapeParams, b: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Balandlik h</label>
-                        <input
-                          type="number"
-                          value={shapeParams.h}
-                          onChange={(e) => setShapeParams({ ...shapeParams, h: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {shapeType === "circ" && (
-                    <div>
-                      <label className="text-[10px] text-[var(--muted)]">Radius R (metr)</label>
                       <input
                         type="number"
-                        value={shapeParams.r}
-                        onChange={(e) => setShapeParams({ ...shapeParams, r: Number(e.target.value) })}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
+                        placeholder="a"
+                        value={shapeParams.a}
+                        onChange={(e) => setShapeParams({ ...shapeParams, a: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="b"
+                        value={shapeParams.b}
+                        onChange={(e) => setShapeParams({ ...shapeParams, b: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="h"
+                        value={shapeParams.h}
+                        onChange={(e) => setShapeParams({ ...shapeParams, h: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                   )}
 
+                  {shapeType === "circ" && (
+                    <input
+                      type="number"
+                      placeholder="Radius R"
+                      value={shapeParams.r}
+                      onChange={(e) => setShapeParams({ ...shapeParams, r: Number(e.target.value) })}
+                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                    />
+                  )}
+
                   {shapeType === "pit" && (
                     <div className="space-y-2">
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Yuqori yuzasi S1 (m²)</label>
-                        <input
-                          type="number"
-                          value={shapeParams.topArea}
-                          onChange={(e) => setShapeParams({ ...shapeParams, topArea: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Pastki tub yuzasi S2 (m²)</label>
-                        <input
-                          type="number"
-                          value={shapeParams.bottomArea}
-                          onChange={(e) => setShapeParams({ ...shapeParams, bottomArea: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[var(--muted)]">Chuqurligi H (metr)</label>
-                        <input
-                          type="number"
-                          value={shapeParams.depth}
-                          onChange={(e) => setShapeParams({ ...shapeParams, depth: Number(e.target.value) })}
-                          className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
-                        />
-                      </div>
+                      <input
+                        type="number"
+                        placeholder="S1 (Yuqori yuzasi m²)"
+                        value={shapeParams.topArea}
+                        onChange={(e) => setShapeParams({ ...shapeParams, topArea: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="S2 (Tub yuzasi m²)"
+                        value={shapeParams.bottomArea}
+                        onChange={(e) => setShapeParams({ ...shapeParams, bottomArea: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Chuqurlik H (m)"
+                        value={shapeParams.depth}
+                        onChange={(e) => setShapeParams({ ...shapeParams, depth: Number(e.target.value) })}
+                        className="w-full p-2 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
+                      />
                     </div>
                   )}
                 </div>
 
-                {/* Results */}
-                <div className="p-4 rounded-xl bg-[var(--panel-raised)] border border-[var(--border)] flex flex-col justify-center space-y-3">
-                  <div className="text-xs font-bold text-[var(--accent)] uppercase">Natijalar</div>
+                <div className="p-5 rounded-2xl bg-[var(--panel-raised)]/90 border border-[var(--border)] flex flex-col justify-center space-y-2">
+                  <div className="text-xs font-bold text-[var(--accent)] uppercase">Hisob natijasi</div>
                   {shapeResult ? (
                     <div className="space-y-2">
                       {shapeResult.area !== undefined && (
                         <div>
                           <span className="text-xs text-[var(--muted)]">Maydon: </span>
-                          <span className="text-lg font-black text-[var(--accent)]">{shapeResult.area} m²</span>
+                          <span className="text-xl font-black text-[var(--accent)]">{shapeResult.area} m²</span>
                           <span className="text-xs text-[var(--muted-2)] ml-2">({(shapeResult.area / 100).toFixed(2)} sotix)</span>
                         </div>
                       )}
@@ -1398,9 +1392,7 @@ export default function GeoCalcApp() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="text-xs text-[var(--muted)]">O‘lchamlarni kiriting</div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1414,66 +1406,58 @@ export default function GeoCalcApp() {
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
                   <TrendingUp className="w-6 h-6 text-[var(--accent)]" />
-                  {tr(language, "Nivelirlash va Nishablik hisoblagich", "Нивелирование и расчёт уклонов", "Leveling & Slope Calculator")}
+                  Nivelirlash va Nishablik
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  {tr(
-                    language,
-                    "Stansiyada nivelirlash jurnali va nishablikni foiz (%), promille (‰), gradus (°) formatlarida hisoblash.",
-                    "Журнал геометрического нивелирования и расчёт уклонов в процентах, промилле и градусах.",
-                    "Differential leveling log book and slope calculation in percent, promille, and degrees.",
-                  )}
+                  Nishablik foizda, promilleda va gradusda; Stansiya nivelir jurnali.
                 </p>
               </div>
 
-              {/* Slope Section */}
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
-                <h3 className="text-xs font-bold text-[var(--accent)] uppercase">
-                  1. Nishablik (Slope) hisoblash
-                </h3>
+              <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-4">
+                <h3 className="text-xs font-bold text-[var(--accent)] uppercase">1. Nishablikni hisoblash</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Balandlik farqi Δh (metr)</label>
+                    <label className="text-[10px] text-[var(--muted)]">Balandlik farqi Δh (metr)</label>
                     <input
                       type="number"
                       value={slopeH}
                       onChange={(e) => setSlopeH(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
+                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Gorizontal masofa d (metr)</label>
+                    <label className="text-[10px] text-[var(--muted)]">Gorizontal masofa d (metr)</label>
                     <input
                       type="number"
                       value={slopeD}
                       onChange={(e) => setSlopeD(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
+                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                     />
                   </div>
                 </div>
 
                 <button
                   onClick={handleCalculateSlope}
-                  className="px-4 py-2 rounded-xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-md"
+                  className="px-4 py-2.5 rounded-xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-md"
                 >
                   Nishablikni hisoblash
                 </button>
 
                 {slopeResult && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] text-[var(--muted)]">Foizda (%)</div>
                       <div className="text-lg font-black text-[var(--accent)]">{slopeResult.slopePercent}%</div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] text-[var(--muted)]">Promille (‰)</div>
                       <div className="text-lg font-black text-[var(--text)]">{slopeResult.slopePromille} ‰</div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] text-[var(--muted)]">Burchak (°)</div>
                       <div className="text-lg font-black text-[var(--blue)]">{slopeResult.slopeAngleDeg}°</div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] text-[var(--muted)]">Nisbat</div>
                       <div className="text-base font-black text-[var(--warning)]">{slopeResult.ratioString}</div>
                     </div>
@@ -1481,56 +1465,45 @@ export default function GeoCalcApp() {
                 )}
               </div>
 
-              {/* Leveling Journal Section */}
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
+              <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-[var(--blue)] uppercase">
-                    2. Stansiyada Nivelirlash jurnali (BS, IS, FS, HI, RL)
-                  </h3>
+                  <h3 className="text-xs font-bold text-[var(--blue)] uppercase">2. Stansiyada Nivelirlash jurnali</h3>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-[var(--muted)]">Boshlang‘ich reper (BM):</span>
+                    <span className="text-[10px] text-[var(--muted)]">Reper (BM):</span>
                     <input
                       type="number"
                       value={levelingBm}
                       onChange={(e) => setLevelingBm(e.target.value)}
-                      className="w-20 p-1.5 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                      className="w-20 p-1.5 rounded-lg bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                     />
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left border-collapse">
+                  <table className="w-full text-xs text-left border-collapse font-mono">
                     <thead>
-                      <tr className="border-b border-[var(--border)] text-[var(--muted)] font-bold">
+                      <tr className="border-b border-[var(--border)] text-[var(--muted)] font-bold font-sans">
                         <th className="p-2">Nuqta</th>
-                        <th className="p-2">Ortga (BS)</th>
-                        <th className="p-2">Oraliq (IS)</th>
-                        <th className="p-2">Oldinga (FS)</th>
-                        <th className="p-2">Asbob balandligi (HI)</th>
-                        <th className="p-2">Relyef balandligi (RL)</th>
-                        <th className="p-2">Izoh</th>
+                        <th className="p-2">BS</th>
+                        <th className="p-2">IS</th>
+                        <th className="p-2">FS</th>
+                        <th className="p-2">HI</th>
+                        <th className="p-2">RL</th>
+                        <th className="p-2 font-sans">Izoh</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {levelingTable.length > 0
-                        ? levelingTable.map((row) => (
-                            <tr key={row.id} className="border-b border-[var(--border)]/50 font-mono">
-                              <td className="p-2 font-bold text-[var(--accent)]">{row.stationName}</td>
-                              <td className="p-2">{row.backsight ?? "-"}</td>
-                              <td className="p-2">{row.intermediate ?? "-"}</td>
-                              <td className="p-2">{row.foresight ?? "-"}</td>
-                              <td className="p-2 font-bold text-[var(--blue)]">{row.heightOfInstrument?.toFixed(3)}</td>
-                              <td className="p-2 font-bold text-[var(--text)]">{row.reducedLevel?.toFixed(3)}</td>
-                              <td className="p-2 text-[var(--muted-2)] font-sans">{row.remark ?? ""}</td>
-                            </tr>
-                          ))
-                        : (
-                          <tr>
-                            <td colSpan={7} className="p-3 text-center text-[var(--muted)]">
-                              Hisoblash tugmasini bosing
-                            </td>
-                          </tr>
-                        )}
+                      {levelingTable.map((row) => (
+                        <tr key={row.id} className="border-b border-[var(--border)]/50">
+                          <td className="p-2 font-bold text-[var(--accent)]">{row.stationName}</td>
+                          <td className="p-2">{row.backsight ?? "-"}</td>
+                          <td className="p-2">{row.intermediate ?? "-"}</td>
+                          <td className="p-2">{row.foresight ?? "-"}</td>
+                          <td className="p-2 font-bold text-[var(--blue)]">{row.heightOfInstrument?.toFixed(3)}</td>
+                          <td className="p-2 font-bold text-[var(--text)]">{row.reducedLevel?.toFixed(3)}</td>
+                          <td className="p-2 text-[var(--muted-2)] font-sans">{row.remark ?? ""}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -1546,33 +1519,28 @@ export default function GeoCalcApp() {
           )}
 
           {/* ========================================================================= */}
-          {/* MODULE 7: VOLUME (CUT & FILL) */}
+          {/* MODULE 7: VOLUME */}
           {/* ========================================================================= */}
           {activeModule === "volume" && (
             <div className="space-y-6 max-w-4xl">
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
                   <BoxIcon className="w-6 h-6 text-[var(--accent)]" />
-                  {tr(language, "Yer ishlari hajmi (TIN Cut & Fill)", "Расчёт объёма земляных работ", "Earthwork Volume (TIN Cut & Fill)")}
+                  Yer ishlari hajmi (TIN Cut & Fill)
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  {tr(
-                    language,
-                    "Delaunay triangulyatsiyasi (TIN) orqali tuproq qazish (Cut) va to‘kish (Fill) hajmini kub metrda hisoblash.",
-                    "Вычисление выемки и насыпи по сетке триангуляции Делоне (TIN).",
-                    "Compute excavation and embankment volume in cubic meters via Delaunay TIN.",
-                  )}
+                  Delaunay triangulyatsiyasi orqali tuproq qazish va to‘kish hajmi.
                 </p>
               </div>
 
-              <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] shadow-xl space-y-4">
+              <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] shadow-2xl backdrop-blur-xl space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Koordinata turi</label>
+                    <label className="text-[10px] text-[var(--muted)] font-semibold">Koordinata turi</label>
                     <select
                       value={volumeCoordMode}
                       onChange={(e) => setVolumeCoordMode(e.target.value as any)}
-                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
+                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs"
                     >
                       <option value="local">Metrik (X Y Z)</option>
                       <option value="wgs84">WGS84 (Lat Lon Z)</option>
@@ -1580,11 +1548,11 @@ export default function GeoCalcApp() {
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-semibold text-[var(--muted)]">Loyiha turi</label>
+                    <label className="text-[10px] text-[var(--muted)] font-semibold">Loyiha turi</label>
                     <select
                       value={volumeDesignMode}
                       onChange={(e) => setVolumeDesignMode(e.target.value as any)}
-                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs text-[var(--text)]"
+                      className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs"
                     >
                       <option value="level">Yagona sath (Level Z)</option>
                       <option value="per-point">Har bir nuqta uchun</option>
@@ -1593,72 +1561,56 @@ export default function GeoCalcApp() {
 
                   {volumeDesignMode === "level" && (
                     <div>
-                      <label className="text-[10px] font-semibold text-[var(--muted)]">Loyiha sathi (Z, metr)</label>
+                      <label className="text-[10px] text-[var(--muted)] font-semibold">Loyiha sathi Z (m)</label>
                       <input
                         type="number"
                         value={volumeDesignLevel}
                         onChange={(e) => setVolumeDesignLevel(e.target.value)}
-                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono text-[var(--text)]"
+                        className="w-full p-2.5 rounded-xl bg-[var(--field)] border border-[var(--border)] text-xs font-mono"
                       />
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-[var(--muted)]">Balandlik nuqtalari ro‘yxati</label>
-                  <textarea
-                    rows={6}
-                    value={volumeInput}
-                    onChange={(e) => setVolumeInput(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs text-[var(--text)] mt-1"
-                  />
-                </div>
+                <textarea
+                  rows={6}
+                  value={volumeInput}
+                  onChange={(e) => setVolumeInput(e.target.value)}
+                  className="w-full p-3.5 rounded-2xl bg-[var(--field)] border border-[var(--border)] font-mono text-xs"
+                />
 
                 {volumeError && (
-                  <div className="p-3 rounded-xl bg-[var(--danger-soft)] border border-[var(--danger)] text-[var(--danger)] text-xs">
-                    {volumeError}
-                  </div>
+                  <div className="p-3 rounded-xl bg-[var(--danger-soft)] text-[var(--danger)] text-xs">{volumeError}</div>
                 )}
 
                 <button
                   onClick={handleCalculateVolume}
-                  className="w-full py-3 rounded-xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-2xl bg-[var(--accent)] text-black font-extrabold text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
-                  <BoxIcon className="w-4 h-4" />
-                  Hajmni hisoblash (TIN)
+                  <BoxIcon className="w-4 h-4" /> Hajmni hisoblash (TIN)
                 </button>
               </div>
 
               {volumeResult && (
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border-strong)] shadow-2xl space-y-4">
-                  <h3 className="text-xs font-bold text-[var(--accent)] uppercase">Hajm Natijalari</h3>
+                <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border-strong)] shadow-2xl backdrop-blur-xl">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] font-bold text-[var(--danger)] uppercase">Qazish (Cut)</div>
-                      <div className="text-lg font-black text-[var(--danger)] mt-0.5">
-                        {volumeResult.cut.toFixed(2)} m³
-                      </div>
+                      <div className="text-lg font-black text-[var(--danger)] mt-0.5">{volumeResult.cut.toFixed(2)} m³</div>
                     </div>
-
-                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] font-bold text-[var(--blue)] uppercase">To‘kish (Fill)</div>
-                      <div className="text-lg font-black text-[var(--blue)] mt-0.5">
-                        {volumeResult.fill.toFixed(2)} m³
-                      </div>
+                      <div className="text-lg font-black text-[var(--blue)] mt-0.5">{volumeResult.fill.toFixed(2)} m³</div>
                     </div>
-
-                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)]">
-                      <div className="text-[10px] font-bold text-[var(--text)] uppercase">Sof hajm (Net)</div>
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
+                      <div className="text-[10px] font-bold text-[var(--text)] uppercase">Sof hajm</div>
                       <div className="text-lg font-black text-[var(--text)] mt-0.5">
                         {volumeResult.net > 0 ? `+${volumeResult.net.toFixed(2)}` : volumeResult.net.toFixed(2)} m³
                       </div>
                     </div>
-
-                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)]">
+                    <div className="p-3.5 rounded-2xl bg-[var(--panel-raised)]">
                       <div className="text-[10px] font-bold text-[var(--muted)] uppercase">Plan maydoni</div>
-                      <div className="text-base font-black text-[var(--accent)] mt-0.5">
-                        {volumeResult.planArea.toFixed(1)} m²
-                      </div>
+                      <div className="text-base font-black text-[var(--accent)] mt-0.5">{volumeResult.planArea.toFixed(1)} m²</div>
                     </div>
                   </div>
                 </div>
@@ -1670,38 +1622,40 @@ export default function GeoCalcApp() {
           {/* MODULE 8: GEOAI ASSISTANT */}
           {/* ========================================================================= */}
           {activeModule === "geoai" && (
-            <div className="space-y-4 max-w-3xl flex flex-col h-[calc(100vh-140px)]">
+            <div className="space-y-4 max-w-4xl flex flex-col h-[calc(100vh-140px)]">
               <div>
                 <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
                   <Sparkles className="w-6 h-6 text-[var(--accent)]" />
-                  GeoAI Geodeziya Maslahatchisi
+                  GeoAI Sun'iy Intellekt Maslahatchisi
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  Geodeziya, topografiya, me'yorlar va formulalar bo‘yicha savollaringizni bering.
+                  Geodeziya, topografiya, formulalar va me'yorlar bo‘yicha to‘liq universal AI maslahatchi.
                 </p>
               </div>
 
-              {/* Chat Container */}
-              <div className="flex-1 p-4 rounded-2xl bg-[var(--panel)] border border-[var(--border)] overflow-y-auto space-y-3 flex flex-col">
+              {/* Chat Window */}
+              <div className="flex-1 p-5 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] overflow-y-auto space-y-4 flex flex-col backdrop-blur-xl shadow-2xl">
                 {chatMessages.map((msg, i) => (
                   <div
                     key={i}
-                    className={`flex items-start gap-2.5 max-w-[85%] ${
+                    className={`flex items-start gap-3 max-w-[85%] ${
                       msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
                     }`}
                   >
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                        msg.role === "user" ? "bg-[var(--blue)] text-white" : "bg-[var(--accent)] text-black"
+                      className={`w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 text-xs font-extrabold shadow-md ${
+                        msg.role === "user"
+                          ? "bg-[var(--blue)] text-white"
+                          : "bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] text-black"
                       }`}
                     >
-                      {msg.role === "user" ? "U" : <Bot className="w-4 h-4" />}
+                      {msg.role === "user" ? (currentUser?.displayName?.[0] || "U") : <Bot className="w-5 h-5" />}
                     </div>
                     <div
-                      className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
+                      className={`p-4 rounded-3xl text-xs leading-relaxed whitespace-pre-wrap ${
                         msg.role === "user"
-                          ? "bg-[var(--blue)] text-white rounded-tr-none"
-                          : "bg-[var(--panel-raised)] text-[var(--text)] border border-[var(--border)] rounded-tl-none"
+                          ? "bg-[var(--blue)] text-white rounded-tr-none shadow-lg"
+                          : "bg-[var(--panel-raised)]/95 text-[var(--text)] border border-[var(--border)] rounded-tl-none shadow-xl"
                       }`}
                     >
                       {msg.text}
@@ -1709,36 +1663,107 @@ export default function GeoCalcApp() {
                   </div>
                 ))}
                 {isChatLoading && (
-                  <div className="flex items-center gap-2 text-xs text-[var(--muted)] p-2">
+                  <div className="flex items-center gap-2.5 text-xs text-[var(--accent)] p-2 animate-pulse font-medium">
                     <LoaderCircle className="w-4 h-4 animate-spin text-[var(--accent)]" />
                     GeoAI javob tayyorlamoqda...
                   </div>
                 )}
               </div>
 
-              {/* Chat Input Bar */}
-              <div className="flex items-center gap-2 p-2 bg-[var(--panel)] border border-[var(--border)] rounded-2xl">
+              {/* Input Bar */}
+              <div className="flex items-center gap-2 p-2 bg-[var(--panel)]/90 border border-[var(--border-strong)] rounded-2xl backdrop-blur-2xl shadow-xl">
                 <input
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
-                  placeholder="Geodeziya bo‘yicha savolingizni yozing..."
-                  className="flex-1 bg-transparent px-3 py-2 text-xs text-[var(--text)] outline-none"
+                  placeholder="GeoAI dan geodeziya yoki hisob-kitoblar haqida so‘rang..."
+                  className="flex-1 bg-transparent px-4 py-2.5 text-xs text-[var(--text)] outline-none"
                 />
                 <button
                   onClick={handleSendChat}
                   disabled={!chatInput.trim() || isChatLoading}
-                  className="p-2.5 rounded-xl bg-[var(--accent)] text-black font-bold disabled:opacity-30 hover:brightness-110 transition-all"
+                  className="p-3 rounded-xl bg-[var(--accent)] text-black font-extrabold disabled:opacity-30 hover:brightness-110 transition-all shadow-md"
                 >
-                  <Send className="w-4 h-4" />
+                  <SendHorizontal className="w-4 h-4" />
                 </button>
               </div>
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* MODULE 9: GUIDE & FORMULAS */}
+          {/* MODULE 9: CONTACTS */}
+          {/* ========================================================================= */}
+          {activeModule === "contacts" && (
+            <div className="space-y-6 max-w-3xl">
+              <div>
+                <h2 className="text-xl md:text-2xl font-extrabold text-[var(--text)] flex items-center gap-2">
+                  <Phone className="w-6 h-6 text-[var(--accent)]" />
+                  Bog‘lanish va Muallif Kontaktlari
+                </h2>
+                <p className="text-xs text-[var(--muted)] mt-1">
+                  GeoCalc platformasi bo‘yicha takliflar, murojaatlar va texnik hamkorlik.
+                </p>
+              </div>
+
+              <div className="p-6 md:p-8 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border-strong)] shadow-2xl backdrop-blur-2xl space-y-6">
+                <div className="flex items-center gap-4 pb-6 border-b border-[var(--border)]">
+                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[var(--accent)] to-[var(--blue)] flex items-center justify-center text-black font-black text-2xl shadow-xl">
+                    TA
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-[var(--text)]">Toirov Azizbek</h3>
+                    <p className="text-xs text-[var(--accent)] font-semibold">
+                      GeoCalc asoschisi va dasturchi muhandisi
+                    </p>
+                    <p className="text-[11px] text-[var(--muted)] mt-0.5">
+                      Powered by Toirov Azizbek
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <a
+                    href="mailto:deartairov@gmail.com"
+                    className="p-4 rounded-2xl bg-[var(--panel-raised)] border border-[var(--border)] hover:border-[var(--accent)] transition-all flex flex-col items-center text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase font-bold">Email</div>
+                    <div className="text-xs font-extrabold text-[var(--text)] mt-0.5">deartairov@gmail.com</div>
+                  </a>
+
+                  <a
+                    href="https://t.me/dearr5"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-4 rounded-2xl bg-[var(--panel-raised)] border border-[var(--border)] hover:border-[var(--blue)] transition-all flex flex-col items-center text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Send className="w-5 h-5" />
+                    </div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase font-bold">Telegram</div>
+                    <div className="text-xs font-extrabold text-[var(--text)] mt-0.5">@dearr5</div>
+                  </a>
+
+                  <a
+                    href="tel:+998958300142"
+                    className="p-4 rounded-2xl bg-[var(--panel-raised)] border border-[var(--border)] hover:border-[var(--warning)] transition-all flex flex-col items-center text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-[var(--danger-soft)] text-[var(--warning)] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Phone className="w-5 h-5" />
+                    </div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase font-bold">Telefon</div>
+                    <div className="text-xs font-extrabold text-[var(--text)] mt-0.5">+998(95) 830-01-42</div>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODULE 10: GUIDE */}
           {/* ========================================================================= */}
           {activeModule === "guide" && (
             <div className="space-y-6 max-w-4xl">
@@ -1748,36 +1773,36 @@ export default function GeoCalcApp() {
                   Qo‘llanma va Geodeziya Formulalari
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  GeoCalc dasturida foydalanilgan xalqaro standartlar va matematik formulalar.
+                  GeoCalc platformasining hisoblash standartlari.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] space-y-2">
-                  <h3 className="text-sm font-bold text-[var(--accent)]">1. Maydon hisoblash (WGS84 va Gauss-Krüger)</h3>
+                <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl space-y-2">
+                  <h3 className="text-sm font-extrabold text-[var(--accent)]">1. Maydon hisoblash (WGS84 va UTM)</h3>
                   <p className="text-xs text-[var(--muted)] leading-relaxed">
-                    WGS84 ellipsoidi (EPSG:4326) koordinatalari O‘zbekiston hududiga mos keluvchi UTM zonalari (EPSG:32641, 32642, 32643)ga proyeksiyalanadi. Shoelace (Gauss maydon formulasi) orqali yuzalar m², sotix va gektarlarga o‘tkaziladi.
+                    WGS84 koordinatalari O‘zbekiston hududi uchun mos UTM zonalari (EPSG:32641, 32642, 32643)ga proyeksiyalanadi va Gauss maydon formulasi orqali hisoblanadi.
                   </p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] space-y-2">
-                  <h3 className="text-sm font-bold text-[var(--blue)]">2. Vincenty Masofa va Azimut formulasi</h3>
+                <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl space-y-2">
+                  <h3 className="text-sm font-extrabold text-[var(--blue)]">2. Vincenty Masofa va Azimut</h3>
                   <p className="text-xs text-[var(--muted)] leading-relaxed">
-                    Ellipsoid sirtida 2 ta nuqta orasidagi to‘g‘ri geodesik masofani 0.5 mm aniqlikda hisoblaydi. To‘g‘ri va teskari azimut hamda 4 chorakli rumb burchaklari aniqlanadi.
+                    WGS84 ellipsoidida ikki nuqta orasidagi to‘g‘ri geodezik masofa va yo‘nalish burchaklarini 0.5 mm aniqlikda hisoblaydi.
                   </p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] space-y-2">
-                  <h3 className="text-sm font-bold text-[var(--warning)]">3. TIN Cut & Fill (Yer ishlari)</h3>
+                <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl space-y-2">
+                  <h3 className="text-sm font-extrabold text-[var(--warning)]">3. TIN Cut & Fill Hajmi</h3>
                   <p className="text-xs text-[var(--muted)] leading-relaxed">
-                    Balandlik nuqtalaridan Delaunay triangulyatsiyasi qurilib, 3D uchburchak prizmalar hosil qilinadi. Nol balandlik chizig‘ida kesilgan prizmalar alohida integrallanib qazish va to‘kish hajmi topiladi.
+                    Delaunay triangulyatsiyasi orqali relyef 3D prizmalarga ajratilib, tuproq qazish va to‘kish hajmi topiladi.
                   </p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-[var(--panel)] border border-[var(--border)] space-y-2">
-                  <h3 className="text-sm font-bold text-[var(--text)]">4. Geometrik Nivelirlash va Nishablik</h3>
+                <div className="p-6 rounded-3xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl space-y-2">
+                  <h3 className="text-sm font-extrabold text-[var(--text)]">4. Nivelirlash va Nishablik</h3>
                   <p className="text-xs text-[var(--muted)] leading-relaxed">
-                    Asbob balandligi (HI = BM + BS) va Relyef nuqtasi (RL = HI - IS/FS) orqali nishablik foiz (%), promille (‰) va burchak (°) shaklida hisoblanadi.
+                    Asbob balandligi (HI) va Relyef nuqtasi (RL) orqali nishablik foizda va gradusda aniqlanadi.
                   </p>
                 </div>
               </div>
@@ -1785,7 +1810,7 @@ export default function GeoCalcApp() {
           )}
 
           {/* ========================================================================= */}
-          {/* MODULE 10: HISTORY */}
+          {/* MODULE 11: HISTORY */}
           {/* ========================================================================= */}
           {activeModule === "history" && (
             <div className="space-y-4 max-w-4xl">
@@ -1795,9 +1820,7 @@ export default function GeoCalcApp() {
                     <History className="w-6 h-6 text-[var(--accent)]" />
                     Hisob-kitoblar tarixi
                   </h2>
-                  <p className="text-xs text-[var(--muted)] mt-1">
-                    Oxirgi amalga oshirilgan hisob-kitoblar ro‘yxati.
-                  </p>
+                  <p className="text-xs text-[var(--muted)] mt-1">Oxirgi amalga oshirilgan hisob-kitoblar.</p>
                 </div>
 
                 {history.length > 0 && (
@@ -1807,7 +1830,7 @@ export default function GeoCalcApp() {
                       localStorage.removeItem("geocalc_history");
                       showToast("Tarix tozalandi!");
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-[var(--danger-soft)] text-[var(--danger)] text-xs font-semibold"
+                    className="px-3 py-1.5 rounded-xl bg-[var(--danger-soft)] text-[var(--danger)] text-xs font-bold"
                   >
                     Tozalash
                   </button>
@@ -1819,23 +1842,50 @@ export default function GeoCalcApp() {
                   history.map((item) => (
                     <div
                       key={item.id}
-                      className="p-4 rounded-xl bg-[var(--panel)] border border-[var(--border)] flex items-center justify-between gap-3 text-xs"
+                      className="p-4 rounded-2xl bg-[var(--panel)]/80 border border-[var(--border)] backdrop-blur-xl flex items-center justify-between gap-3 text-xs"
                     >
                       <div>
                         <div className="font-bold text-[var(--accent)]">{item.title}</div>
-                        <div className="font-mono text-sm font-bold text-[var(--text)] mt-0.5">{item.value}</div>
+                        <div className="font-mono text-sm font-extrabold text-[var(--text)] mt-0.5">{item.value}</div>
                       </div>
                       <div className="text-[10px] text-[var(--muted-2)] font-mono">{item.date}</div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-xs text-[var(--muted)] rounded-2xl bg-[var(--panel)] border border-[var(--border)]">
+                  <div className="p-8 text-center text-xs text-[var(--muted)] rounded-3xl bg-[var(--panel)]/70 border border-[var(--border)]">
                     Hali hech qanday hisob-kitob saqlanmagan.
                   </div>
                 )}
               </div>
             </div>
           )}
+
+          {/* ========================================================================= */}
+          {/* FIXED BOTTOM FOOTER (POWERED BY TOIROV AZIZBEK) */}
+          {/* ========================================================================= */}
+          <footer className="w-full py-8 mt-12 border-t border-[var(--border)] text-center text-xs text-[var(--muted)] flex flex-col items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6 text-xs font-semibold">
+              <a href="mailto:deartairov@gmail.com" className="hover:text-[var(--accent)] transition-all flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-[var(--accent)]" /> deartairov@gmail.com
+              </a>
+              <span>·</span>
+              <a href="https://t.me/dearr5" target="_blank" rel="noreferrer" className="hover:text-[var(--blue)] transition-all flex items-center gap-1.5">
+                <Send className="w-3.5 h-3.5 text-[var(--blue)]" /> Telegram: @dearr5
+              </a>
+              <span>·</span>
+              <a href="tel:+998958300142" className="hover:text-[var(--warning)] transition-all flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-[var(--warning)]" /> +998(95) 830-01-42
+              </a>
+            </div>
+
+            <div className="font-extrabold text-sm text-[var(--text)] flex items-center gap-1.5 tracking-tight mt-1">
+              Powered by <span className="text-[var(--accent)]">Toirov Azizbek</span>
+            </div>
+
+            <div className="text-[11px] text-[var(--muted-2)]">
+              GeoCalc — Geodezik va topografik hisoblash platformasi © {new Date().getFullYear()}
+            </div>
+          </footer>
         </main>
       </div>
     </div>

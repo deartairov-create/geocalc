@@ -1,13 +1,14 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
-/* Leaflet container fixes for 100dvh Mobile-First Map */
+/* Leaflet Container GPU Optimizations */
 .leaflet-container {
   font-family: inherit;
-  background-color: var(--bg-deep) !important;
+  background-color: var(--bg) !important;
   width: 100% !important;
   height: 100% !important;
   z-index: 1;
+  will-change: transform;
 }
 
 .leaflet-control-zoom {
@@ -15,28 +16,27 @@
 }
 
 .leaflet-control-attribution {
-  background: rgba(0, 0, 0, 0.45) !important;
-  backdrop-filter: blur(12px) !important;
-  color: rgba(255, 255, 255, 0.6) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
   font-size: 9px !important;
   padding: 2px 8px !important;
   border-radius: 9999px !important;
-  margin: 8px !important;
+  margin: 6px !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 .leaflet-control-attribution a {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .leaflet-popup-content-wrapper {
   background: var(--liquid-card-bg) !important;
-  backdrop-filter: blur(28px) saturate(200%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
   color: var(--text) !important;
   border: 1px solid var(--border-glass) !important;
-  border-radius: 24px !important;
-  box-shadow: inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.5), 0 20px 45px rgba(0, 0, 0, 0.55) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45) !important;
 }
 
 .leaflet-popup-tip {
@@ -44,57 +44,47 @@
   border: 1px solid var(--border-glass) !important;
 }
 
-/* Liquid Glass System Tokens */
+/* Performant Liquid Glass Tokens */
 :root {
-  --bg: #060b14;
-  --bg-deep: #03070d;
-  --liquid-card-bg: rgba(255, 255, 255, 0.07);
-  --liquid-card-bg-subtle: rgba(255, 255, 255, 0.04);
-  --liquid-sheet-bg: rgba(9, 16, 29, 0.78);
-  --liquid-pill-bg: rgba(255, 255, 255, 0.10);
-  --liquid-field-bg: rgba(255, 255, 255, 0.05);
-  --text: #f8fafc;
-  --muted: #94a3b8;
-  --muted-2: #64748b;
-  --border: rgba(255, 255, 255, 0.12);
-  --border-glass: rgba(255, 255, 255, 0.24);
-  --border-strong: rgba(16, 185, 129, 0.50);
+  --bg: #0a0a0a;
+  --bg-deep: #000000;
+  --liquid-card-bg: rgba(18, 18, 18, 0.82);
+  --liquid-sheet-bg: rgba(14, 14, 14, 0.92);
+  --liquid-pill-bg: rgba(26, 26, 26, 0.85);
+  --liquid-field-bg: rgba(30, 30, 30, 0.75);
+  --text: #fafafa;
+  --muted: #a3a3a3;
+  --muted-2: #737373;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-glass: rgba(255, 255, 255, 0.16);
   --accent: #10B981;
-  --accent-strong: #059669;
   --accent-soft: rgba(16, 185, 129, 0.18);
   --blue: #2563EB;
   --blue-soft: rgba(37, 99, 235, 0.18);
   --danger: #ef4444;
-  --danger-soft: rgba(239, 68, 68, 0.16);
+  --danger-soft: rgba(239, 68, 68, 0.18);
   --warning: #f59e0b;
-  --shadow-liquid: inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.5), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.3), 0 20px 50px -10px rgba(0, 8, 24, 0.65);
-  --shadow-liquid-pill: inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.65), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25), 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
 :root[data-theme="light"] {
-  --bg: #ebf3fa;
-  --bg-deep: #f4f8fc;
-  --liquid-card-bg: rgba(255, 255, 255, 0.68);
-  --liquid-card-bg-subtle: rgba(255, 255, 255, 0.50);
-  --liquid-sheet-bg: rgba(248, 251, 255, 0.88);
-  --liquid-pill-bg: rgba(255, 255, 255, 0.75);
-  --liquid-field-bg: rgba(255, 255, 255, 0.60);
-  --text: #0f172a;
-  --muted: #475569;
-  --muted-2: #64748b;
-  --border: rgba(255, 255, 255, 0.70);
-  --border-glass: rgba(255, 255, 255, 0.90);
-  --border-strong: rgba(16, 185, 129, 0.45);
+  --bg: #f5f5f5;
+  --bg-deep: #ffffff;
+  --liquid-card-bg: rgba(255, 255, 255, 0.90);
+  --liquid-sheet-bg: rgba(255, 255, 255, 0.96);
+  --liquid-pill-bg: rgba(245, 245, 245, 0.92);
+  --liquid-field-bg: rgba(240, 240, 240, 0.95);
+  --text: #0a0a0a;
+  --muted: #525252;
+  --muted-2: #737373;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-glass: rgba(0, 0, 0, 0.14);
   --accent: #059669;
-  --accent-strong: #047857;
   --accent-soft: rgba(5, 150, 105, 0.14);
   --blue: #2563EB;
   --blue-soft: rgba(37, 99, 235, 0.12);
   --danger: #dc2626;
-  --danger-soft: rgba(220, 38, 38, 0.10);
+  --danger-soft: rgba(220, 38, 38, 0.12);
   --warning: #d97706;
-  --shadow-liquid: inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.08), 0 18px 40px rgba(15, 23, 42, 0.08);
-  --shadow-liquid-pill: inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.06), 0 10px 24px rgba(15, 23, 42, 0.07);
 }
 
 * {
@@ -112,94 +102,67 @@ html, body {
   overflow: hidden;
   background-color: var(--bg);
   color: var(--text);
-  font-family: var(--font-sans, "Geist Sans", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-family: var(--font-sans, "Geist Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   touch-action: manipulation;
   user-select: none;
 }
 
-/* Fluid Animated Aurora Mesh Backgrounds */
-@keyframes floatAurora1 {
-  0% { transform: translate(0, 0) scale(1); opacity: 0.22; }
-  50% { transform: translate(60px, 40px) scale(1.15); opacity: 0.35; }
-  100% { transform: translate(-30px, 70px) scale(0.95); opacity: 0.22; }
-}
-
-@keyframes floatAurora2 {
-  0% { transform: translate(0, 0) scale(1.1); opacity: 0.18; }
-  50% { transform: translate(-50px, 60px) scale(0.9); opacity: 0.28; }
-  100% { transform: translate(40px, -30px) scale(1.15); opacity: 0.18; }
-}
-
-@keyframes floatAurora3 {
-  0% { transform: translate(0, 0) scale(0.95); opacity: 0.15; }
-  50% { transform: translate(70px, -50px) scale(1.2); opacity: 0.30; }
-  100% { transform: translate(-60px, 20px) scale(1); opacity: 0.15; }
-}
-
-.aurora-layer-1 {
-  animation: floatAurora1 18s ease-in-out infinite alternate;
-}
-
-.aurora-layer-2 {
-  animation: floatAurora2 22s ease-in-out infinite alternate;
-}
-
-.aurora-layer-3 {
-  animation: floatAurora3 26s ease-in-out infinite alternate;
-}
-
-/* Liquid Glass CSS Classes */
+/* Lightweight High-Performance Liquid Glass Classes (No heavy blur, hardware accelerated) */
 .liquid-glass {
-  background: linear-gradient(135deg, var(--liquid-card-bg) 0%, rgba(255, 255, 255, 0.02) 100%);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  background: var(--liquid-card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-glass);
-  box-shadow: var(--shadow-liquid);
-  border-radius: 28px;
-  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  border-radius: 20px;
+  will-change: transform;
 }
 
 .liquid-glass-sheet {
-  background: linear-gradient(180deg, var(--liquid-sheet-bg) 0%, rgba(6, 12, 22, 0.94) 100%);
-  backdrop-filter: blur(36px) saturate(210%);
-  -webkit-backdrop-filter: blur(36px) saturate(210%);
+  background: var(--liquid-sheet-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border-glass);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.55), inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  will-change: transform;
 }
 
 .liquid-pill {
-  background: linear-gradient(135deg, var(--liquid-pill-bg) 0%, rgba(255, 255, 255, 0.03) 100%);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: var(--liquid-pill-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-glass);
-  box-shadow: var(--shadow-liquid-pill);
   border-radius: 9999px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+  will-change: transform;
 }
 
-.liquid-field {
-  background: var(--liquid-field-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-glass);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+.liquid-pill:active {
+  transform: scale(0.96);
+}
+
+.liquid-btn-primary {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  color: #000000;
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
   border-radius: 9999px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
-.liquid-field:focus-within {
-  border-color: var(--accent);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 16px var(--accent-soft);
+.liquid-btn-primary:active {
+  transform: scale(0.96);
 }
 
-/* Scrollbars */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -209,8 +172,4 @@ html, body {
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
 }

@@ -1,68 +1,61 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe,
   Sun,
   Moon,
-  Crosshair,
   Layers,
   MapPin,
   Trash2,
   Undo2,
-  Maximize2,
+  Crosshair,
+  Compass,
+  Sliders,
   Sparkles,
-  Phone,
-  Calculator,
-  User as UserIcon,
-  LogIn,
-  LogOut,
-  ShieldCheck,
 } from "lucide-react";
 
 import { onAuthStateChanged, signInWithPopup, signOut, type User as FirebaseUser } from "firebase/auth";
 import { firebaseAuth, googleProvider } from "@/lib/firebase-client";
 
-import LiquidButton from "@/components/LiquidButton";
-import LiquidBottomSheet, { type SheetSnapState, type ModuleId } from "@/components/LiquidBottomSheet";
+import LiquidBottomSheet, { type ModuleId } from "@/components/LiquidBottomSheet";
 import AuthGate from "@/components/auth-gate";
 import type { GeoPoint } from "@/lib/legacy-geometry";
 import { formatNumber } from "@/lib/legacy-geometry";
 import { calculatePolygonProperties } from "@/lib/geodesy-advanced";
 
-// Dynamic SSR-Safe Interactive Leaflet Map
+// SSR-Safe Fast Interactive Leaflet GIS Canvas
 const InteractiveMap = dynamic(() => import("@/components/interactive-map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#060b14] text-slate-400">
-      <Globe className="w-8 h-8 text-emerald-400 animate-spin" />
-      <span className="text-xs font-bold uppercase tracking-wider">Web-GIS Xaritasi yuklanmoqda...</span>
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-[#0a0a0a] text-neutral-400">
+      <Globe className="w-7 h-7 text-emerald-400 animate-spin" />
+      <span className="text-[11px] font-bold uppercase tracking-wider">Web-GIS Xaritasi yuklanmoqda...</span>
     </div>
   ),
 });
 
 type AppLanguage = "uz" | "ru" | "en";
 
-function tr(l: AppLanguage, uz: string, ru: string, en: string) {
-  return l === "ru" ? ru : l === "en" ? en : uz;
-}
-
-const INITIAL_SAMPLE_POINTS: GeoPoint[] = [
-  { lat: 41.311081, lon: 69.240562 },
-  { lat: 41.311081, lon: 69.241562 },
-  { lat: 41.310281, lon: 69.241562 },
-  { lat: 41.310281, lon: 69.240562 },
-];
-
 export default function MobileFirstGeoCalc() {
   const [language, setLanguage] = useState<AppLanguage>("uz");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [points, setPoints] = useState<GeoPoint[]>(INITIAL_SAMPLE_POINTS);
-  const [activeModule, setActiveModule] = useState<ModuleId>("area");
-  const [snapState, setSnapState] = useState<SheetSnapState>("peek");
-  const [activeUnit, setActiveUnit] = useState<"m2" | "sotix" | "ha">("m2");
+  const [points, setPoints] = useState<GeoPoint[]>([
+    { lat: 41.311081, lon: 69.240562 },
+    { lat: 41.311081, lon: 69.241562 },
+    { lat: 41.310281, lon: 69.241562 },
+    { lat: 41.310281, lon: 69.240562 },
+  ]);
+
+  // Mode: polygon (Yuza), distance (Masofa), pinpoint (Koordinata)
+  const [mapMode, setMapMode] = useState<"polygon" | "distance" | "pinpoint">("polygon");
+  const [baseLayer, setBaseLayer] = useState<"satellite" | "osm" | "dark">("satellite");
+
+  // Bottom Sheet state
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [activeModule, setActiveModule] = useState<ModuleId>("coordinates");
+  const [unitMode, setUnitMode] = useState<"m2" | "sotix" | "ha">("m2");
 
   // Auth State
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -86,72 +79,49 @@ export default function MobileFirstGeoCalc() {
     }
   }, []);
 
-  const handleSignIn = async () => {
-    try {
-      await signInWithPopup(firebaseAuth, googleProvider);
-    } catch (e: any) {
-      console.error("Auth error", e);
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(firebaseAuth);
-    } catch (e: any) {
-      console.error("Sign out error", e);
-    }
-  };
-
-  // Live Area & Perimeter Metrics
+  // Live Polygon Calculations
   const polygonMetrics = React.useMemo(() => {
     if (points.length < 3) return null;
     return calculatePolygonProperties(points);
   }, [points]);
 
-  // Map action triggers
-  const handleClearPoints = () => setPoints([]);
-  const handleUndoPoint = () => setPoints((prev) => prev.slice(0, -1));
+  // Actions
+  const handleUndo = () => setPoints((prev) => prev.slice(0, -1));
+  const handleClear = () => setPoints([]);
 
   return (
-    <div className="relative w-full h-[100dvh] max-h-[100dvh] overflow-hidden bg-[var(--bg)] text-[var(--text)] font-sans select-none flex flex-col">
-      {/* Auth Gate (Blocks app if not logged in with Google) */}
+    <div className="relative w-full h-[100dvh] max-h-[100dvh] overflow-hidden bg-[var(--bg)] text-[var(--text)] select-none">
+      {/* Auth Gate Modal */}
       <AuthGate
         currentUser={currentUser}
         isAuthLoading={isAuthLoading}
-        onSignIn={handleSignIn}
+        onSignIn={() => signInWithPopup(firebaseAuth, googleProvider)}
         language={language}
       />
 
-      {/* Dynamic Fluid Animated Aurora Mesh Layers (Background Glow) */}
-      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-10%] left-[10%] w-[550px] h-[550px] rounded-full bg-emerald-500/20 blur-[130px] aurora-layer-1" />
-        <div className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-600/22 blur-[140px] aurora-layer-2" />
-        <div className="absolute bottom-[-10%] left-[25%] w-[500px] h-[500px] rounded-full bg-teal-400/18 blur-[120px] aurora-layer-3" />
-      </div>
-
       {/* ========================================================================= */}
-      {/* TOP LIQUID GLASS STATUS BAR */}
+      {/* ZONE 1: TOP BAR (Single Compact Row: Brand + Lang + Theme + User) */}
       {/* ========================================================================= */}
-      <header className="absolute top-3 inset-x-3 z-30 flex items-center justify-between pointer-events-auto">
-        {/* Brand Chip */}
-        <div className="liquid-pill px-3.5 py-1.5 flex items-center gap-2 shadow-lg">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center shadow-md">
-            <Globe className="w-4 h-4 text-black" />
+      <header className="absolute top-3 inset-x-3 z-30 flex items-center justify-between pointer-events-none">
+        {/* Left: Brand Pill */}
+        <div className="liquid-pill px-3 py-1.5 flex items-center gap-2 pointer-events-auto shadow-md">
+          <div className="w-6 h-6 rounded-full bg-emerald-500 text-black flex items-center justify-center font-black text-xs">
+            G
           </div>
           <span className="text-xs font-black tracking-tight text-[var(--text)]">
-            GeoCalc <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] border border-emerald-400/30">PRO</span>
+            GeoCalc <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400">PRO</span>
           </span>
         </div>
 
-        {/* Right Action Tools: Language + Theme + Profile */}
-        <div className="flex items-center gap-1.5">
+        {/* Right: Lang + Theme + Profile */}
+        <div className="flex items-center gap-1.5 pointer-events-auto">
           {/* Language pill */}
           <div className="liquid-pill p-0.5 flex items-center">
             {(["uz", "ru", "en"] as AppLanguage[]).map((l) => (
               <button
                 key={l}
                 onClick={() => setLanguage(l)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase transition-all ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase transition-all ${
                   language === l ? "bg-white text-black shadow-sm" : "text-[var(--muted)]"
                 }`}
               >
@@ -160,19 +130,17 @@ export default function MobileFirstGeoCalc() {
             ))}
           </div>
 
-          {/* Theme Switcher */}
-          <LiquidButton
-            variant="glass"
-            size="icon"
+          {/* Theme switch */}
+          <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-            className="w-9 h-9 min-w-[36px] min-h-[36px]"
+            className="w-8 h-8 rounded-full liquid-pill flex items-center justify-center text-[var(--muted)]"
           >
-            {theme === "dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-blue-400" />}
-          </LiquidButton>
+            {theme === "dark" ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-blue-400" />}
+          </button>
 
-          {/* User Profile Avatar */}
+          {/* User Profile */}
           {currentUser && (
-            <div className="w-9 h-9 rounded-full liquid-pill flex items-center justify-center p-0.5 border border-emerald-400/40">
+            <div className="w-8 h-8 rounded-full liquid-pill flex items-center justify-center p-0.5 border border-emerald-400/40">
               {currentUser.photoURL ? (
                 <img src={currentUser.photoURL} alt="" className="w-full h-full rounded-full object-cover" />
               ) : (
@@ -184,100 +152,148 @@ export default function MobileFirstGeoCalc() {
       </header>
 
       {/* ========================================================================= */}
-      {/* FLOATING RESULT CHIP (OVER MAP HERO STAGE) */}
+      {/* ZONE 2: RIGHT FLOATING BAR (Map Utilities: Layers, Undo, Clear) */}
       {/* ========================================================================= */}
-      <AnimatePresence>
-        {polygonMetrics && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto cursor-pointer"
-            onClick={() => {
-              // Cycle units: m2 -> sotix -> ha
-              if (activeUnit === "m2") setActiveUnit("sotix");
-              else if (activeUnit === "sotix") setActiveUnit("ha");
-              else setActiveUnit("m2");
-            }}
+      <div className="absolute right-3 top-16 z-30 flex flex-col gap-2 pointer-events-auto">
+        {/* Layer Switcher Button */}
+        <button
+          onClick={() => {
+            if (baseLayer === "satellite") setBaseLayer("osm");
+            else if (baseLayer === "osm") setBaseLayer("dark");
+            else setBaseLayer("satellite");
+          }}
+          className="w-11 h-11 rounded-full liquid-pill flex items-center justify-center text-[var(--text)] shadow-lg"
+          title="Xarita qatlamini almashtirish"
+        >
+          <Layers className="w-5 h-5 text-[var(--accent)]" />
+        </button>
+
+        {/* Undo Point */}
+        {points.length > 0 && (
+          <button
+            onClick={handleUndo}
+            className="w-11 h-11 rounded-full liquid-pill flex items-center justify-center text-[var(--text)] shadow-lg"
+            title="Nuqtani bekor qilish"
           >
-            <div className="liquid-glass px-5 py-2.5 rounded-full flex items-center gap-3 shadow-[0_12px_36px_rgba(0,0,0,0.45)] border border-emerald-400/50 hover:scale-[1.02] transition-transform">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <div className="flex items-baseline gap-1.5 font-mono">
-                <span className="text-sm font-black text-[var(--accent)]">
-                  {activeUnit === "m2"
-                    ? `${formatNumber(polygonMetrics.areaM2)} m²`
-                    : activeUnit === "sotix"
-                    ? `${polygonMetrics.areaSotix.toFixed(2)} sotix`
-                    : `${polygonMetrics.areaHectares.toFixed(4)} ha`}
-                </span>
-                <span className="text-[10px] text-[var(--muted-2)] font-sans">
-                  ({tr(language, "tegish orqali birlikni o‘zgartiring", "нажмите для смены", "tap to switch unit")})
-                </span>
-              </div>
-              <div className="text-[11px] font-mono text-[var(--blue)] font-bold pl-2 border-l border-white/15">
-                {polygonMetrics.perimeterMeters.toFixed(1)} m
-              </div>
-            </div>
-          </motion.div>
+            <Undo2 className="w-5 h-5 text-[var(--text)]" />
+          </button>
         )}
-      </AnimatePresence>
+
+        {/* Clear Points */}
+        {points.length > 0 && (
+          <button
+            onClick={handleClear}
+            className="w-11 h-11 rounded-full bg-red-500/80 text-white flex items-center justify-center shadow-lg"
+            title="Tozalash"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
       {/* ========================================================================= */}
-      {/* FULLSCREEN MAP BACKDROP (HERO STAGE) */}
+      {/* ZONE 3: CENTER CANVAS (100dvh Full Web-GIS Leaflet Engine) */}
       {/* ========================================================================= */}
       <div className="absolute inset-0 z-10 w-full h-full">
         <InteractiveMap
           initialPoints={points}
           onPointsChange={setPoints}
           language={language}
-          height="100%"
+          mode={mapMode}
+          baseLayer={baseLayer}
+          hideInternalHUD={true}
         />
       </div>
 
       {/* ========================================================================= */}
-      {/* FLOATING MAP CONTROLS (THUMB RIGHT ACTION BAR) */}
+      {/* ZONE 4: BOTTOM ACTION ZONE (Floating Result Chip + Mode Bar + Sheet Trigger) */}
       {/* ========================================================================= */}
-      <div className="absolute right-3.5 top-28 z-20 flex flex-col gap-2 pointer-events-auto">
-        {points.length > 0 && (
-          <>
-            <LiquidButton
-              variant="glass"
-              size="icon"
-              onClick={handleUndoPoint}
-              title="Oxirgi nuqtani bekor qilish"
-              className="shadow-xl"
-            >
-              <Undo2 className="w-4.5 h-4.5 text-[var(--text)]" />
-            </LiquidButton>
-            <LiquidButton
-              variant="danger"
-              size="icon"
-              onClick={handleClearPoints}
-              title="Barcha nuqtalarni tozalash"
-              className="shadow-xl"
-            >
-              <Trash2 className="w-4.5 h-4.5 text-white" />
-            </LiquidButton>
-          </>
+      <div className="absolute inset-x-3 bottom-3 z-30 flex flex-col items-center gap-2.5 pointer-events-none">
+        {/* Floating Live Result Chip */}
+        {polygonMetrics && mapMode === "polygon" && (
+          <button
+            onClick={() => {
+              if (unitMode === "m2") setUnitMode("sotix");
+              else if (unitMode === "sotix") setUnitMode("ha");
+              else setUnitMode("m2");
+            }}
+            className="pointer-events-auto liquid-pill px-4 py-2 flex items-center gap-2 shadow-xl border border-emerald-400/50 hover:scale-[1.02] transition-transform"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-mono font-black text-[var(--accent)]">
+              {unitMode === "m2"
+                ? `${formatNumber(polygonMetrics.areaM2)} m²`
+                : unitMode === "sotix"
+                ? `${polygonMetrics.areaSotix.toFixed(2)} sotix`
+                : `${polygonMetrics.areaHectares.toFixed(4)} ha`}
+            </span>
+            <span className="text-[10px] text-[var(--muted-2)] font-mono">|</span>
+            <span className="text-xs font-mono font-bold text-[var(--text)]">
+              {polygonMetrics.perimeterMeters.toFixed(1)} m
+            </span>
+          </button>
         )}
+
+        {/* Master Bottom Action Bar (Mode Pill + Tools Sheet Button) */}
+        <div className="w-full flex items-center justify-between gap-2 pointer-events-auto">
+          {/* Geodesy Mode Selector */}
+          <div className="flex-1 liquid-pill p-1 flex items-center justify-between gap-1 shadow-xl">
+            <button
+              onClick={() => setMapMode("polygon")}
+              className={`flex-1 py-2 px-3 rounded-full text-xs font-bold transition-all ${
+                mapMode === "polygon"
+                  ? "bg-[var(--accent)] text-black shadow-sm"
+                  : "text-[var(--muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              📐 Yuza
+            </button>
+            <button
+              onClick={() => setMapMode("distance")}
+              className={`flex-1 py-2 px-3 rounded-full text-xs font-bold transition-all ${
+                mapMode === "distance"
+                  ? "bg-[var(--blue)] text-white shadow-sm"
+                  : "text-[var(--muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              📏 Masofa
+            </button>
+            <button
+              onClick={() => setMapMode("pinpoint")}
+              className={`flex-1 py-2 px-3 rounded-full text-xs font-bold transition-all ${
+                mapMode === "pinpoint"
+                  ? "bg-amber-400 text-black shadow-sm"
+                  : "text-[var(--muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              📍 Nuqta
+            </button>
+          </div>
+
+          {/* Tools / Coordinates Drawer Trigger */}
+          <button
+            onClick={() => setIsSheetOpen(true)}
+            className="w-12 h-12 rounded-full liquid-btn-primary flex items-center justify-center flex-shrink-0 shadow-xl min-w-[48px]"
+            title="Qo‘shimcha vositalar va koordinatalar"
+          >
+            <Sliders className="w-5 h-5 text-black" />
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* GESTURE DRAGGABLE LIQUID BOTTOM SHEET */}
+      {/* EXTENDED TOOLS & COORDINATES BOTTOM SHEET */}
       {/* ========================================================================= */}
       <LiquidBottomSheet
+        isOpen={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
         points={points}
         onPointsChange={setPoints}
         language={language}
         currentUser={currentUser}
         activeModule={activeModule}
         onSelectModule={setActiveModule}
-        onClearPoints={handleClearPoints}
-        onUndoPoint={handleUndoPoint}
-        onLocateMe={() => {}}
-        onFitBounds={() => {}}
-        snapState={snapState}
-        onSnapChange={setSnapState}
+        onClearPoints={handleClear}
       />
     </div>
   );

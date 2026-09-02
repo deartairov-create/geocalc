@@ -26,7 +26,23 @@ import {
   TrendingUp,
   Triangle,
   X,
-  type LucideIcon,
+  Copy,
+  Download,
+  Trash2,
+  Undo2,
+  Crosshair,
+  Award,
+  BookOpen,
+  Sprout,
+  Navigation,
+  FileSpreadsheet,
+  Activity,
+  Layers,
+  Plus,
+  Play,
+  Square,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 
 import { onAuthStateChanged, signInWithPopup, signOut, type User as FirebaseUser } from "firebase/auth";
@@ -67,9 +83,9 @@ import AuthGate from "@/components/auth-gate";
 const InteractiveMap = dynamic(() => import("@/components/interactive-map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[520px] liquid-glass flex flex-col items-center justify-center gap-3 text-[var(--muted)]">
-      <Globe className="w-8 h-8 text-[var(--accent)] animate-spin" />
-      <span className="text-sm font-semibold">Sun'iy yo'ldosh xaritasi yuklanmoqda...</span>
+    <div className="w-full h-full min-h-[400px] rounded-3xl bg-black/60 border border-white/10 flex flex-col items-center justify-center gap-3 text-slate-400">
+      <Globe className="w-8 h-8 text-emerald-400 animate-spin" />
+      <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Web-GIS Xaritasi yuklanmoqda...</span>
     </div>
   ),
 });
@@ -79,826 +95,666 @@ function tr(l: AppLanguage, uz: string, ru: string, en: string) {
   return l === "ru" ? ru : l === "en" ? en : uz;
 }
 
-type ModuleId = "area" | "map" | "distance" | "converter" | "shapes" | "slope" | "volume" | "geoai" | "contacts" | "guide" | "history";
+export type ModuleId =
+  | "area"
+  | "distance"
+  | "converter"
+  | "cadastre"
+  | "gps_tracker"
+  | "shapes"
+  | "slope"
+  | "volume"
+  | "geoai"
+  | "guide"
+  | "contacts"
+  | "history";
 
-type HistoryRecord = { id: string; type: string; title: string; value: string; time: string; };
+type HistoryRecord = { id: string; type: string; title: string; value: string; time: string };
 
-type NavItem = { id: ModuleId; label: string; icon: LucideIcon; badge?: string; };
+const AREA_SAMPLE = "41.311081 69.240562\n41.311081 69.241562\n41.310281 69.241562\n41.310281 69.240562";
+const VOLUME_SAMPLE = "0 0 100.40\n40 0 101.10\n80 0 99.90\n0 40 100.80\n40 40 102.20\n80 40 100.30\n0 80 99.60\n40 80 101.40\n80 80 100.00";
 
-function getNavItems(l: AppLanguage): NavItem[] {
-  return [
-    { id: "area",      label: tr(l, "Yuza hisoblash",   "Площадь",      "Area"),         icon: Calculator },
-    { id: "map",       label: tr(l, "Interfaol xarita", "Карта",        "Map"),           icon: MapIcon,     badge: "GPS" },
-    { id: "distance",  label: tr(l, "Masofa & Azimut",  "Азимут",       "Distance"),      icon: Compass,     badge: "PRO" },
-    { id: "converter", label: tr(l, "Konvertor",        "Конвертер",    "Converter"),     icon: RefreshCw },
-    { id: "shapes",    label: tr(l, "Shakllar",         "Фигуры",       "Shapes"),        icon: Triangle },
-    { id: "slope",     label: tr(l, "Nishablik",        "Уклон",        "Slope"),         icon: TrendingUp },
-    { id: "volume",    label: tr(l, "Hajm (Cut&Fill)",  "Объём",        "Volume"),        icon: BoxIcon },
-    { id: "geoai",     label: "GeoAI",                                                     icon: Sparkles,    badge: "BETA · Tekin" },
-    { id: "contacts",  label: tr(l, "Bog'lanish",       "Контакты",     "Contacts"),      icon: Phone },
-    { id: "guide",     label: tr(l, "Qo'llanma",       "Справка",      "Guide"),         icon: Info },
-    { id: "history",   label: tr(l, "Tarix",            "История",      "History"),       icon: History },
-  ];
-}
-
-const AREA_SAMPLE = `41.311081 69.240562
-41.311081 69.241562
-41.310281 69.241562
-41.310281 69.240562`;
-
-const VOLUME_SAMPLE = `0 0 100.40
-40 0 101.10
-80 0 99.90
-0 40 100.80
-40 40 102.20
-80 40 100.30
-0 80 99.60
-40 80 101.40
-80 80 100.00`;
-
-// ─── Liquid Glass UI Primitives ───────────────────────────────────────────────
-
-function LiquidCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`liquid-glass ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function StatChip({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="flex-1 min-w-0 p-3.5 liquid-pill text-center">
-      <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-sm font-black truncate ${accent ? "text-[var(--accent)]" : "text-[var(--text)]"}`}>{value}</div>
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }: { title: React.ReactNode; subtitle?: string }) {
-  return (
-    <div className="mb-6">
-      <h2 className="text-xl md:text-2xl font-black text-[var(--text)] tracking-tight flex items-center flex-wrap gap-2">{title}</h2>
-      {subtitle && <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed font-medium">{subtitle}</p>}
-    </div>
-  );
-}
-
-// ─── Main App ──────────────────────────────────────────────────────────────────
-
-export default function GeoCalcApp() {
+export default function MasterGeoCalc() {
   const [language, setLanguage] = useState<AppLanguage>("uz");
-  const [activeModule, setActiveModule] = useState<ModuleId>("area");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeModule, setActiveModule] = useState<ModuleId>("area");
   const [historyList, setHistoryList] = useState<HistoryRecord[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Auth
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  // Area
-  const [areaInput, setAreaInput] = useState(AREA_SAMPLE);
-  const [areaPoints, setAreaPoints] = useState<GeoPoint[]>([]);
-  const [areaError, setAreaError] = useState<string | null>(null);
-  const [areaMapView, setAreaMapView] = useState(true);
+  const [points, setPoints] = useState<GeoPoint[]>([
+    { lat: 41.311081, lon: 69.240562 },
+    { lat: 41.311081, lon: 69.241562 },
+    { lat: 41.310281, lon: 69.241562 },
+    { lat: 41.310281, lon: 69.240562 },
+  ]);
+  const [mapMode, setMapMode] = useState<"polygon" | "distance" | "pinpoint">("polygon");
+  const [baseLayer, setBaseLayer] = useState<"satellite" | "osm" | "dark">("satellite");
+  const [unitMode, setUnitMode] = useState<"m2" | "sotix" | "ha">("m2");
 
-  // Distance
+  const [areaInput, setAreaInput] = useState(AREA_SAMPLE);
+  const [areaError, setAreaError] = useState<string | null>(null);
+
   const [distP1, setDistP1] = useState({ lat: "41.311081", lon: "69.240562" });
   const [distP2, setDistP2] = useState({ lat: "39.654700", lon: "66.975800" });
   const [distResult, setDistResult] = useState<AzimuthResult | null>(null);
-  const [directStart, setDirectStart] = useState({ lat: "41.311081", lon: "69.240562" });
-  const [directAz, setDirectAz] = useState("45");
-  const [directDist, setDirectDist] = useState("1000");
-  const [directResult, setDirectResult] = useState<GeoPoint | null>(null);
 
-  // Converter
   const [convLat, setConvLat] = useState("41.311081");
   const [convLon, setConvLon] = useState("69.240562");
-  const [batchIn, setBatchIn] = useState(AREA_SAMPLE);
-  const [batchOut, setBatchOut] = useState("");
 
-  // Shapes
-  const [shapeType, setShapeType] = useState<"rect"|"tri"|"trap"|"circ"|"pit">("rect");
-  const [sp, setSp] = useState<Record<string,number>>({ w:25,l:40,a:30,b:40,c:50,h:15,r:12,topArea:200,bottomArea:120,depth:3 });
-  const [shapeResult, setShapeResult] = useState<Record<string,number>|null>(null);
+  const [cadastreArea, setCadastreArea] = useState("50");
+  const [cadastrePricePerSotix, setCadastrePricePerSotix] = useState("2500");
+  const [cropType, setCropType] = useState<"cotton" | "wheat" | "orchard" | "greenhouse">("greenhouse");
 
-  // Slope / Leveling
+  const [isTracking, setIsTracking] = useState(false);
+  const [gpsWatchId, setGpsWatchId] = useState<number | null>(null);
+  const [currentGpsPos, setCurrentGpsPos] = useState<{ lat: number; lon: number; acc: number; speed: number; alt: number } | null>(null);
+  const [gpsTrackLog, setGpsTrackLog] = useState<GeoPoint[]>([]);
+
+  const [shapeType, setShapeType] = useState<"rect" | "tri" | "trap" | "circ">("rect");
+  const [sp, setSp] = useState<Record<string, number>>({ w: 25, l: 40, a: 30, b: 40, c: 50, h: 15, r: 12 });
+  const [shapeResult, setShapeResult] = useState<Record<string, number> | null>(null);
+
   const [slopeH, setSlopeH] = useState("2.5");
   const [slopeD, setSlopeD] = useState("100");
   const [slopeRes, setSlopeRes] = useState<SlopeResult | null>(null);
-  const [bmVal, setBmVal] = useState("100.00");
-  const [levelRows] = useState([
-    { bs: 1.45, remark: "BM-1" }, { is: 1.20, remark: "0+00" }, { is: 1.65, remark: "0+50" },
-    { fs: 2.10, bs: 1.35, remark: "TP-1" }, { fs: 0.95, remark: "TBM-2" },
-  ]);
-  const [levelTable, setLevelTable] = useState<LevelingStation[]>([]);
 
-  // Volume
   const [volIn, setVolIn] = useState(VOLUME_SAMPLE);
   const [volCoord, setVolCoord] = useState<VolumeCoordinateMode>("local");
   const [volDesign, setVolDesign] = useState<VolumeDesignMode>("level");
   const [volLevel, setVolLevel] = useState("101.00");
   const [volResult, setVolResult] = useState<VolumeResult | null>(null);
-  const [volError, setVolError] = useState<string | null>(null);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
-
-  const addHistory = (item: Omit<HistoryRecord, "id" | "time">) => {
-    const rec = { ...item, id: Math.random().toString(36).slice(2,9), time: new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) };
-    setHistoryList((prev) => { const next = [rec, ...prev.slice(0,49)]; try { localStorage.setItem("geocalc_history", JSON.stringify(next)); } catch {} return next; });
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
   };
 
-  // Auth listener
+  const addHistory = (item: Omit<HistoryRecord, "id" | "time">) => {
+    const rec = {
+      ...item,
+      id: Math.random().toString(36).slice(2, 9),
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setHistoryList((prev) => {
+      const next = [rec, ...prev.slice(0, 49)];
+      try { localStorage.setItem("geocalc_history", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   useEffect(() => {
     try {
-      const unsub = onAuthStateChanged(firebaseAuth, (user) => { setCurrentUser(user); setIsAuthLoading(false); });
+      const unsub = onAuthStateChanged(firebaseAuth, (user) => {
+        setCurrentUser(user);
+        setIsAuthLoading(false);
+      });
       return () => unsub();
-    } catch { setIsAuthLoading(false); }
+    } catch {
+      setIsAuthLoading(false);
+    }
   }, []);
 
   const handleSignIn = async () => {
     try {
       await signInWithPopup(firebaseAuth, googleProvider);
       showToast(tr(language, "Muvaffaqiyatli kirdingiz!", "Вход выполнен!", "Signed in!"));
-    } catch (e: any) { showToast(e.message || "Kirishda xatolik"); }
+    } catch (e: any) {
+      showToast(e.message || "Kirishda xatolik");
+    }
   };
 
   const handleSignOut = async () => {
-    try { await signOut(firebaseAuth); showToast(tr(language, "Chiqildi", "Вышли", "Signed out")); }
-    catch {}
+    try {
+      await signOut(firebaseAuth);
+      showToast(tr(language, "Chiqildi", "Вышли", "Signed out"));
+    } catch {}
   };
 
-  // Theme
-  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
-  // Load history
-  useEffect(() => { try { const s = localStorage.getItem("geocalc_history"); if (s) setHistoryList(JSON.parse(s)); } catch {} }, []);
-
-  // Area parse
   useEffect(() => {
     try {
-      if (!areaInput.trim()) { setAreaPoints([]); setAreaError(null); return; }
-      setAreaPoints(parseCoordinates(areaInput)); setAreaError(null);
-    } catch (e: any) { setAreaError(e.message || "Xatolik"); }
+      const s = localStorage.getItem("geocalc_history");
+      if (s) setHistoryList(JSON.parse(s));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (!areaInput.trim()) { setAreaError(null); return; }
+      const parsed = parseCoordinates(areaInput);
+      setPoints(parsed);
+      setAreaError(null);
+    } catch (e: any) {
+      setAreaError(e.message || "Xatolik");
+    }
   }, [areaInput]);
 
-  const areaProps = useMemo(() => {
-    if (areaPoints.length < 3) return null;
-    return calculatePolygonProperties(areaPoints);
-  }, [areaPoints]);
-
-  const handleMapPoints = (pts: GeoPoint[]) => {
-    setAreaPoints(pts);
-    setAreaInput(pts.map((p) => `${p.lat.toFixed(6)} ${p.lon.toFixed(6)}`).join("\n"));
+  const handleMapPointsChange = (pts: GeoPoint[]) => {
+    setPoints(pts);
+    setAreaInput(pts.map((p) => p.lat.toFixed(6) + " " + p.lon.toFixed(6)).join("\n"));
   };
 
-  // Shape calc
+  const polygonMetrics = useMemo(() => {
+    if (points.length < 3) return null;
+    return calculatePolygonProperties(points);
+  }, [points]);
+
   useEffect(() => {
     try {
-      if (shapeType==="rect") setShapeResult(SimpleShapes.rectangle(sp.w||0,sp.l||0) as any);
-      else if (shapeType==="tri") setShapeResult(SimpleShapes.triangleHeron(sp.a||0,sp.b||0,sp.c||0) as any);
-      else if (shapeType==="trap") setShapeResult(SimpleShapes.trapezoid(sp.a||0,sp.b||0,sp.h||0) as any);
-      else if (shapeType==="circ") setShapeResult(SimpleShapes.circle(sp.r||0) as any);
-      else if (shapeType==="pit") setShapeResult(SimpleShapes.pitVolume(sp.topArea||0,sp.bottomArea||0,sp.depth||0) as any);
-    } catch { setShapeResult(null); }
+      if (shapeType === "rect") setShapeResult(SimpleShapes.rectangle(sp.w || 0, sp.l || 0) as any);
+      else if (shapeType === "tri") setShapeResult(SimpleShapes.triangleHeron(sp.a || 0, sp.b || 0, sp.c || 0) as any);
+      else if (shapeType === "trap") setShapeResult(SimpleShapes.trapezoid(sp.a || 0, sp.b || 0, sp.h || 0) as any);
+      else if (shapeType === "circ") setShapeResult(SimpleShapes.circle(sp.r || 0) as any);
+    } catch {
+      setShapeResult(null);
+    }
   }, [shapeType, sp]);
 
-  const navItems = getNavItems(language);
+  const cadastreMetrics = useMemo(() => {
+    const areaSotixVal = parseFloat(cadastreArea) || 0;
+    const priceVal = parseFloat(cadastrePricePerSotix) || 0;
+    const totalLandValue = areaSotixVal * priceVal;
+    const areaHectaresVal = areaSotixVal / 100;
 
-  // Nav Item
-  const NavButton = ({ item }: { item: NavItem }) => {
-    const isActive = activeModule === item.id;
-    const Icon = item.icon;
-    return (
-      <button
-        onClick={() => { setActiveModule(item.id); setIsSidebarOpen(false); }}
-        className={`group w-full text-left px-4 py-3 rounded-full flex items-center gap-3 transition-all duration-200 ${
-          isActive
-            ? "liquid-btn-primary text-black shadow-lg"
-            : "text-[var(--muted)] hover:bg-white/10 hover:text-[var(--text)]"
-        }`}
-      >
-        <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? "text-black" : "text-[var(--muted-2)] group-hover:text-[var(--accent)]"}`} />
-        <span className="text-xs font-bold flex-1 truncate">{item.label}</span>
-        {item.badge && (
-          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-            isActive ? "bg-black/25 text-black" : "bg-[var(--accent-soft)] text-[var(--accent)] border border-white/20"
-          }`}>{item.badge}</span>
-        )}
-      </button>
-    );
+    let expectedYieldTons = 0;
+    let expectedRevenueUSD = 0;
+    let waterUsageM3 = 0;
+
+    if (cropType === "cotton") {
+      expectedYieldTons = areaHectaresVal * 3.8;
+      expectedRevenueUSD = expectedYieldTons * 800;
+      waterUsageM3 = areaHectaresVal * 6500;
+    } else if (cropType === "wheat") {
+      expectedYieldTons = areaHectaresVal * 6.2;
+      expectedRevenueUSD = expectedYieldTons * 320;
+      waterUsageM3 = areaHectaresVal * 4200;
+    } else if (cropType === "orchard") {
+      expectedYieldTons = areaHectaresVal * 22;
+      expectedRevenueUSD = expectedYieldTons * 1100;
+      waterUsageM3 = areaHectaresVal * 5500;
+    } else if (cropType === "greenhouse") {
+      expectedYieldTons = areaHectaresVal * 120;
+      expectedRevenueUSD = expectedYieldTons * 1400;
+      waterUsageM3 = areaHectaresVal * 7500;
+    }
+
+    const estimatedTaxUZS = areaHectaresVal * 1450000;
+
+    return { totalLandValue, areaHectaresVal, expectedYieldTons, expectedRevenueUSD, waterUsageM3, estimatedTaxUZS };
+  }, [cadastreArea, cadastrePricePerSotix, cropType]);
+
+  const toggleGpsTracking = () => {
+    if (isTracking) {
+      if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+      setIsTracking(false);
+      setGpsWatchId(null);
+      showToast("GPS kuzatuv to‘xtatildi");
+    } else {
+      if (!navigator.geolocation) {
+        showToast("GPS qo‘llab-quvvatlanmaydi");
+        return;
+      }
+      const id = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = parseFloat(pos.coords.latitude.toFixed(6));
+          const lon = parseFloat(pos.coords.longitude.toFixed(6));
+          const acc = Math.round(pos.coords.accuracy);
+          const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+          const alt = pos.coords.altitude ? Math.round(pos.coords.altitude) : 0;
+          setCurrentGpsPos({ lat, lon, acc, speed, alt });
+          const newPt: GeoPoint = { lat, lon };
+          setGpsTrackLog((prev) => [...prev, newPt]);
+          setPoints((prev) => [...prev, newPt]);
+        },
+        (err) => showToast("GPS xatosi: " + err.message),
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 },
+      );
+      setGpsWatchId(id);
+      setIsTracking(true);
+      showToast("GPS o‘lchash boshlandi! Maydon bo‘ylab yuring.");
+    }
   };
 
-  // Field
-  const Field = ({ label, value, onChange, type = "text", placeholder = "" }: {
-    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string;
-  }) => (
-    <div>
-      <label className="block text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1.5">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-[var(--text)] text-sm font-mono outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted-2)] shadow-inner" />
-    </div>
-  );
-
-  const PrimaryBtn = ({ onClick, children, className = "" }: { onClick: () => void; children: React.ReactNode; className?: string }) => (
-    <button onClick={onClick}
-      className={`liquid-btn-primary flex items-center justify-center gap-2 px-6 py-3 text-sm ${className}`}>
-      {children}
-    </button>
-  );
+  const modulesList = [
+    { id: "area", label: tr(language, "Maydon hisoblash", "Площадь участка", "Land Area"), icon: Calculator, badge: "WGS84" },
+    { id: "distance", label: tr(language, "Masofa & Azimut", "Азимут и расстояние", "Distance & Azimuth"), icon: Compass, badge: "PRO" },
+    { id: "converter", label: tr(language, "Koordinata Konvertor", "Конвертер координат", "Converter"), icon: RefreshCw },
+    { id: "cadastre", label: tr(language, "Kadastr & Hosildorlik", "Кадастр и урожай", "Cadastre & Yield"), icon: Sprout, badge: "YANGI" },
+    { id: "gps_tracker", label: tr(language, "Jonli GPS O‘lchash", "Живой GPS замер", "Live GPS Walk"), icon: Navigation, badge: "LIVE" },
+    { id: "shapes", label: tr(language, "Geometrik Shakllar", "Геометрические фигуры", "Simple Shapes"), icon: Triangle },
+    { id: "slope", label: tr(language, "Nivelirlash & Nishablik", "Нивелирование", "Leveling & Slope"), icon: TrendingUp },
+    { id: "volume", label: tr(language, "Yer ishlari (TIN Hajm)", "Объём Cut & Fill", "TIN Cut & Fill"), icon: BoxIcon },
+    { id: "geoai", label: "GeoAI BETA", icon: Sparkles, badge: "TEKIN" },
+    { id: "guide", label: tr(language, "Qo‘llanma & Formulalar", "Справка и формулы", "Formulas & Guide"), icon: BookOpen },
+    { id: "contacts", label: tr(language, "Muallif & Aloqa", "Контакты автора", "Author Contacts"), icon: Phone },
+    { id: "history", label: tr(language, "Hisoblar Tarixi", "История расчётов", "History"), icon: History },
+  ];
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--accent)]/30 font-sans relative overflow-x-hidden">
-
-      {/* Auth Gate */}
+    <div className="w-full h-[100dvh] max-h-[100dvh] overflow-hidden bg-[var(--bg)] text-[var(--text)] font-sans select-none flex flex-col">
       <AuthGate currentUser={currentUser} isAuthLoading={isAuthLoading} onSignIn={handleSignIn} language={language} />
 
-      {/* Toast */}
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity:0, y:-16, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:-16 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-5 py-3 rounded-full liquid-glass text-[var(--accent)] text-xs font-bold shadow-2xl">
-            <Check className="w-4 h-4" /> {toast}
+          <motion.div initial={{ opacity: 0, y: -20, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] px-5 py-2.5 rounded-full liquid-glass text-emerald-400 text-xs font-black shadow-2xl flex items-center gap-2 border border-emerald-400/50">
+            <Check className="w-4 h-4 text-emerald-400" /> {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main Container */}
-      <div className="relative z-10 flex-1 flex flex-col md:flex-row max-w-[1850px] mx-auto w-full">
+      {/* TOP CONTROL HUB */}
+      <header className="h-14 px-4 bg-black/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between flex-shrink-0 z-30">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg border border-white/40">
+            <Globe className="w-5 h-5 text-black" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-black tracking-tight text-white">GeoCalc</span>
+              <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-400/30">PRO v3.5</span>
+            </div>
+            <div className="text-[10px] text-neutral-400 font-medium hidden sm:block">WGS-84 & O‘zDSt Sertifikatlangan Geodeziya Veb-GIS</div>
+          </div>
+        </div>
 
-        {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-[310px] flex flex-col liquid-glass rounded-none md:rounded-r-[36px] border-y-0 border-l-0 p-5 transition-transform duration-300 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        }`}>
+        <div className="flex items-center gap-2">
+          <div className="liquid-pill p-0.5 flex items-center">
+            {(["uz", "ru", "en"] as AppLanguage[]).map((l) => (
+              <button key={l} onClick={() => setLanguage(l)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase transition-all ${language === l ? "bg-white text-black shadow-sm" : "text-[var(--muted)]"}`}>{l}</button>
+            ))}
+          </div>
+          <button onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            className="w-8 h-8 rounded-full liquid-pill flex items-center justify-center text-[var(--muted)]">
+            {theme === "dark" ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-blue-400" />}
+          </button>
+          {currentUser ? (
+            <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+              <div className="w-8 h-8 rounded-full liquid-pill p-0.5 border border-emerald-400/50">
+                {currentUser.photoURL ? <img src={currentUser.photoURL} alt="" className="w-full h-full rounded-full object-cover" /> :
+                  <span className="text-xs font-black text-emerald-400 flex items-center justify-center h-full">{currentUser.displayName?.[0] || "U"}</span>}
+              </div>
+              <button onClick={handleSignOut} title="Chiqish" className="text-neutral-400 hover:text-red-400 p-1"><LogOut className="w-4 h-4" /></button>
+            </div>
+          ) : (
+            <button onClick={handleSignIn} className="px-3 py-1.5 rounded-full bg-emerald-500 text-black font-extrabold text-xs flex items-center gap-1.5"><LogIn className="w-3.5 h-3.5" /> Kirish</button>
+          )}
+        </div>
+      </header>
 
-          {/* Brand */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--blue)] flex items-center justify-center shadow-lg border border-white/50">
-                <Globe className="w-6 h-6 text-black" />
+      {/* MODULES NAVIGATION RIBBON */}
+      <div className="h-11 px-3 bg-black/60 backdrop-blur-sm border-b border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0 z-20">
+        {modulesList.map((m) => {
+          const Icon = m.icon;
+          const isActive = activeModule === m.id;
+          return (
+            <button key={m.id} onClick={() => setActiveModule(m.id as ModuleId)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                isActive ? "bg-emerald-500 text-black shadow-md scale-[1.02]" : "bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10"
+              }`}>
+              <Icon className="w-3.5 h-3.5" />
+              <span>{m.label}</span>
+              {m.badge && <span className={`text-[8px] font-black px-1.5 py-0.2 rounded-full uppercase ${isActive ? "bg-black/30 text-black" : "bg-emerald-500/20 text-emerald-400"}`}>{m.badge}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* MAIN DUAL WORKSPACE */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden relative">
+        {/* LEFT STATION (Scrollable) */}
+        <aside className="w-full lg:w-[480px] xl:w-[540px] h-full overflow-y-auto p-4 md:p-5 bg-[#0a0a0a]/90 backdrop-blur-md border-r border-white/10 flex flex-col gap-4 z-20 flex-shrink-0">
+
+          {/* MODULE 1: AREA */}
+          {activeModule === "area" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2"><Calculator className="w-5 h-5 text-emerald-400" /> Yer Maydoni (WGS84 & UTM)</h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">Gauss-Krüger proyeksiyasi orqali aniq hisoblanadi</p>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => setAreaInput(AREA_SAMPLE)} className="px-2.5 py-1 rounded-lg bg-white/5 text-[11px] font-bold text-neutral-300 hover:bg-white/10">Namuna</button>
+                  <button onClick={() => { setPoints([]); setAreaInput(""); }} className="px-2.5 py-1 rounded-lg bg-red-500/20 text-[11px] font-bold text-red-400 hover:bg-red-500/30">Tozalash</button>
+                </div>
               </div>
               <div>
-                <div className="text-lg font-black text-[var(--text)] tracking-tight leading-tight flex items-center gap-1.5">
-                  GeoCalc <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] border border-white/20">PRO</span>
-                </div>
-                <div className="text-[11px] text-[var(--muted)] font-medium">Geodeziya & GeoAI</div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Koordinatalar (Lat Lon) — <span className="text-emerald-400 font-mono">{points.length} ta nuqta</span></label>
+                <textarea rows={5} value={areaInput} onChange={(e) => setAreaInput(e.target.value)}
+                  placeholder="41.311081 69.240562\n..." className="w-full px-3.5 py-2.5 rounded-2xl bg-white/5 border border-white/10 font-mono text-xs text-white outline-none focus:border-emerald-400 resize-y" />
               </div>
-            </div>
-            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 rounded-full hover:bg-white/10 text-[var(--muted)]"><X className="w-5 h-5" /></button>
-          </div>
-
-          {/* User Profile */}
-          <div className="mb-5 p-3 rounded-full liquid-pill">
-            {currentUser ? (
-              <div className="flex items-center gap-2.5 justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {currentUser.photoURL ? (
-                    <img src={currentUser.photoURL} alt="" className="w-8 h-8 rounded-full border border-white/50 object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-black font-black text-xs">
-                      {currentUser.displayName?.[0] || "U"}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold truncate text-[var(--text)]">{currentUser.displayName || "Foydalanuvchi"}</div>
-                    <div className="text-[10px] text-[var(--muted-2)] truncate">{currentUser.email}</div>
+              {areaError && <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold">{areaError}</div>}
+              {polygonMetrics && (
+                <div className="grid grid-cols-2 gap-2.5 font-mono">
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+                    <div className="text-[10px] font-bold text-emerald-400 uppercase">Maydon (m²)</div>
+                    <div className="text-lg font-black text-emerald-400 mt-0.5">{formatNumber(polygonMetrics.areaM2)} m²</div>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                    <div className="text-[10px] font-bold text-neutral-400 uppercase">Sotix (Ar)</div>
+                    <div className="text-lg font-black text-white mt-0.5">{polygonMetrics.areaSotix.toFixed(2)} sotix</div>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                    <div className="text-[10px] font-bold text-neutral-400 uppercase">Gektar (ha)</div>
+                    <div className="text-lg font-black text-white mt-0.5">{polygonMetrics.areaHectares.toFixed(4)} ha</div>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                    <div className="text-[10px] font-bold text-neutral-400 uppercase">Perimetr</div>
+                    <div className="text-lg font-black text-blue-400 mt-0.5">{polygonMetrics.perimeterMeters.toFixed(1)} m</div>
                   </div>
                 </div>
-                <button onClick={handleSignOut} title="Chiqish"
-                  className="p-2 rounded-full text-[var(--muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-all flex-shrink-0">
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button onClick={handleSignIn}
-                className="w-full py-2 px-4 rounded-full liquid-btn-primary text-black text-xs font-bold flex items-center justify-center gap-2">
-                <LogIn className="w-4 h-4" /> Google orqali kirish
-              </button>
-            )}
-          </div>
-
-          {/* Nav */}
-          <nav className="flex-1 space-y-1 overflow-y-auto">
-            {navItems.map((item) => <NavButton key={item.id} item={item} />)}
-          </nav>
-
-          {/* Bottom Settings */}
-          <div className="pt-4 mt-4 border-t border-white/10 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center liquid-pill p-1">
-                {(["uz","ru","en"] as AppLanguage[]).map((l) => (
-                  <button key={l} onClick={() => setLanguage(l)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-black uppercase transition-all ${language===l ? "bg-white text-black shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => setTheme(t => t==="dark"?"light":"dark")}
-                className="p-2.5 rounded-full liquid-pill text-[var(--muted)] hover:text-[var(--text)] transition-all">
-                {theme==="dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
-              </button>
-            </div>
-            <div className="text-center text-[11px] text-[var(--muted-2)] font-medium">
-              Powered by <strong className="text-[var(--accent)]">Toirov Azizbek</strong>
-            </div>
-          </div>
-        </aside>
-
-        {isSidebarOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden" onClick={() => setIsSidebarOpen(false)} />}
-
-        {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 md:p-6 lg:p-8">
-
-          {/* Top Mobile Bar */}
-          <div className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 liquid-glass rounded-full mb-4">
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded-full text-[var(--text)]">
-              <Menu className="w-5 h-5" />
-            </button>
-            <span className="font-black text-sm flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-[var(--accent)]" /> GeoCalc PRO
-            </span>
-            <button onClick={() => setTheme(t => t==="dark"?"light":"dark")}
-              className="p-2 rounded-full text-[var(--muted)]">
-              {theme==="dark" ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-[var(--blue)]" />}
-            </button>
-          </div>
-
-          <div className="flex-1 space-y-6">
-
-          {/* ──────────── MODULE: AREA ──────────── */}
-          {activeModule==="area" && (
-            <div>
-              <SectionHeader
-                title={<><Calculator className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer maydonini aniq hisoblash","Расчёт площади участка","Precision Land Area Calculation")}</>}
-                subtitle={tr(language,"WGS84 koordinatalarni kiriting yoki quyidagi sun'iy yo'ldosh xaritasida chizing.","Введите координаты WGS84 или нарисуйте участок на спутниковой карте.","Enter WGS84 coordinates or draw directly on the interactive satellite map.")}
-              />
-
-              <div className="flex items-center gap-2 mb-5 p-1 liquid-pill w-fit">
-                {[{v:true,l:tr(language,"🗺️ Sun'iy yo'ldosh xarita","🗺️ Спутниковая карта","🗺️ Satellite Map")},{v:false,l:tr(language,"✏️ Matnli koordinatalar","✏️ Текст координат","✏️ Text coordinates")}].map(o=>(
-                  <button key={String(o.v)} onClick={() => setAreaMapView(o.v)}
-                    className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${areaMapView===o.v?"bg-white text-black shadow-md":"text-[var(--muted)] hover:text-[var(--text)]"}`}>
-                    {o.l}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-5 space-y-4">
-                  <LiquidCard className="p-6 space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
-                        {tr(language,"Koordinatalar (Kenglik Uzunlik)","Координаты (Широта Долгота)","Coordinates (Lat Lon)")}
-                        <span className="ml-2 text-[var(--accent)] font-mono">({areaPoints.length} {tr(language,"nuqta","точек","points")})</span>
-                      </label>
-                      <textarea rows={7} value={areaInput} onChange={e=>setAreaInput(e.target.value)}
-                        placeholder="41.311081 69.240562\n41.311081 69.241562\n..."
-                        className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] transition-colors resize-y placeholder:text-[var(--muted-2)] shadow-inner" />
-                    </div>
-                    {areaError && <div className="px-4 py-2.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/40 text-[var(--danger)] text-xs font-semibold">{areaError}</div>}
-                    <div className="flex gap-2">
-                      <button onClick={()=>setAreaInput(AREA_SAMPLE)} className="px-4 py-2 rounded-full liquid-pill text-xs font-bold text-[var(--muted)] hover:text-[var(--text)]">{tr(language,"Namuna","Пример","Sample")}</button>
-                      <button onClick={()=>setAreaInput("")} className="px-4 py-2 rounded-full bg-[var(--danger-soft)] text-xs font-bold text-[var(--danger)] border border-[var(--danger)]/30">{tr(language,"Tozalash","Очистить","Clear")}</button>
-                    </div>
-                  </LiquidCard>
-
-                  {areaProps && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <StatChip label="Maydon (m²)" value={formatNumber(areaProps.areaM2)} accent />
-                      <StatChip label="Sotix (Ar)" value={areaProps.areaSotix.toFixed(2)} />
-                      <StatChip label="Gektar (ha)" value={areaProps.areaHectares.toFixed(4)+" ha"} />
-                      <StatChip label="Perimetr" value={areaProps.perimeterMeters.toFixed(1)+" m"} />
-                    </div>
-                  )}
-                </div>
-
-                <div className="lg:col-span-7">
-                  {areaMapView ? (
-                    <InteractiveMap initialPoints={areaPoints} onPointsChange={handleMapPoints} language={language} height="540px" />
-                  ) : (
-                    <LiquidCard className="h-[540px] flex flex-col items-center justify-center text-center p-8 text-[var(--muted)]">
-                      <Globe className="w-12 h-12 text-[var(--accent)] mb-3 opacity-60" />
-                      <div className="text-sm font-semibold">{tr(language,"Xaritada ko'rish uchun yuqoridagi 'Sun'iy yo'ldosh xarita' tugmasini bosing.","Переключитесь на карту для интерактивного черчения.","Switch to satellite map to draw interactively.")}</div>
-                    </LiquidCard>
-                  )}
-                </div>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => { const text = points.map((p) => p.lat.toFixed(6) + " " + p.lon.toFixed(6)).join("\n"); navigator.clipboard.writeText(text); showToast("Nusxalandi!"); }}
+                  className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-xs font-extrabold text-white flex items-center justify-center gap-1.5"><Copy className="w-4 h-4" /> Nusxalash</button>
+                <button onClick={() => { const geojson = { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "Polygon", coordinates: [points.map(p => [p.lon, p.lat]).concat([[points[0].lon, points[0].lat]])] }, properties: { areaM2: polygonMetrics?.areaM2 || 0 } }] }; const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "geocalc_polygon.geojson"; a.click(); showToast("GeoJSON yuklab olindi!"); }}
+                  className="flex-1 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-xs font-black text-black flex items-center justify-center gap-1.5"><Download className="w-4 h-4" /> GeoJSON Eksport</button>
               </div>
             </div>
           )}
 
-          {/* ──────────── MODULE: MAP ──────────── */}
-          {activeModule==="map" && (
-            <div>
-              <SectionHeader title={<><MapIcon className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"To'liq ekranli Sun'iy yo'ldosh xaritasi","Спутниковая интерактивная карта","Full Satellite Interactive Map")}</>} />
-              <InteractiveMap language={language} height="calc(100vh - 210px)" />
-            </div>
-          )}
-
-          {/* ──────────── MODULE: DISTANCE ──────────── */}
-          {activeModule==="distance" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader
-                title={<><Compass className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Masofa, Azimut va Rumb","Расстояние, Азимут и Румб","Distance, Azimuth & Bearing")}</>}
-                subtitle="Vincenty ellipsoidal formula — 0.5 mm geodezik aniqlik"
-              />
-
-              <LiquidCard className="p-6 md:p-8 space-y-5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">{tr(language,"1-Boshlang'ich nuqta","Точка 1","Point 1")}</div>
-                    <Field label="Lat" value={distP1.lat} onChange={v=>setDistP1({...distP1,lat:v})} />
-                    <Field label="Lon" value={distP1.lon} onChange={v=>setDistP1({...distP1,lon:v})} />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">{tr(language,"2-Oxirgi nuqta","Точка 2","Point 2")}</div>
-                    <Field label="Lat" value={distP2.lat} onChange={v=>setDistP2({...distP2,lat:v})} />
-                    <Field label="Lon" value={distP2.lon} onChange={v=>setDistP2({...distP2,lon:v})} />
-                  </div>
+          {/* MODULE 2: DISTANCE */}
+          {activeModule === "distance" && (
+            <div className="space-y-4 font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><Compass className="w-5 h-5 text-blue-400" /> Vincenty Geodezik Masofa & Azimut</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">WGS-84 ellipsoidi bo‘yicha 0.5 mm millimetrik aniqlikda</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                <div className="text-xs font-bold text-emerald-400 uppercase">1-Nuqta</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" inputMode="decimal" placeholder="Lat 1" value={distP1.lat} onChange={(e) => setDistP1({ ...distP1, lat: e.target.value })} className="px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
+                  <input type="text" inputMode="decimal" placeholder="Lon 1" value={distP1.lon} onChange={(e) => setDistP1({ ...distP1, lon: e.target.value })} className="px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
                 </div>
-                <PrimaryBtn onClick={() => {
-                  try {
-                    const r = calculateVincentyDistanceAndAzimuth({lat:Number(distP1.lat),lon:Number(distP1.lon)},{lat:Number(distP2.lat),lon:Number(distP2.lon)});
-                    setDistResult(r); addHistory({type:"distance",title:"Masofa & Azimut",value:`${r.distanceKm.toFixed(3)} km | ${r.initialAzimuthDeg.toFixed(2)}°`}); showToast("Hisoblandi!");
-                  } catch(e:any){showToast(e.message);}
-                }} className="w-full">
-                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
-                </PrimaryBtn>
+                <div className="text-xs font-bold text-blue-400 uppercase">2-Nuqta</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" inputMode="decimal" placeholder="Lat 2" value={distP2.lat} onChange={(e) => setDistP2({ ...distP2, lat: e.target.value })} className="px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
+                  <input type="text" inputMode="decimal" placeholder="Lon 2" value={distP2.lon} onChange={(e) => setDistP2({ ...distP2, lon: e.target.value })} className="px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
+                </div>
+                <button onClick={() => { try { const res = calculateVincentyDistanceAndAzimuth({ lat: parseFloat(distP1.lat), lon: parseFloat(distP1.lon) }, { lat: parseFloat(distP2.lat), lon: parseFloat(distP2.lon) }); setDistResult(res); addHistory({ type: "distance", title: "Masofa & Azimut", value: res.distanceKm.toFixed(3) + " km | " + res.initialAzimuthDeg.toFixed(2) + "°" }); showToast("Masofa va Azimut hisoblandi!"); } catch (e: any) { showToast(e.message); } }}
+                  className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-black text-xs flex items-center justify-center gap-1.5"><Compass className="w-4 h-4" /> Vincenty Formula bilan hisoblash</button>
                 {distResult && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/10">
-                    <StatChip label="Metr" value={distResult.distanceMeters.toFixed(1)+" m"} accent />
-                    <StatChip label="Km" value={distResult.distanceKm.toFixed(3)+" km"} />
-                    <StatChip label="Azimut" value={distResult.initialAzimuthDeg.toFixed(2)+"°"} />
-                    <StatChip label="Rumb" value={distResult.rhumbString} />
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                    <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[10px] text-neutral-400 font-bold">Masofa (m)</div><div className="text-sm font-black text-emerald-400">{distResult.distanceMeters.toFixed(1)} m</div></div>
+                    <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[10px] text-neutral-400 font-bold">Masofa (km)</div><div className="text-sm font-black text-white">{distResult.distanceKm.toFixed(3)} km</div></div>
+                    <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[10px] text-neutral-400 font-bold">Boshlang‘ich Azimut</div><div className="text-sm font-black text-blue-400">{distResult.initialAzimuthDeg.toFixed(2)}°</div></div>
+                    <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[10px] text-neutral-400 font-bold">Rumb</div><div className="text-sm font-black text-amber-400">{distResult.rhumbString}</div></div>
                   </div>
                 )}
-              </LiquidCard>
-
-              <LiquidCard className="p-6 md:p-8 space-y-4">
-                <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">{tr(language,"To'g'ri geodezik masala (Nuqta + Azimut + Masofa)","Прямая геодезическая задача","Direct Geodetic Problem")}</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Start Lat" value={directStart.lat} onChange={v=>setDirectStart({...directStart,lat:v})} />
-                  <Field label="Start Lon" value={directStart.lon} onChange={v=>setDirectStart({...directStart,lon:v})} />
-                  <Field label="Azimut (°)" value={directAz} onChange={setDirectAz} />
-                  <Field label="Masofa (m)" value={directDist} onChange={setDirectDist} />
-                </div>
-                <PrimaryBtn onClick={() => {
-                  try {
-                    const r = calculateDirectGeodeticPoint({lat:Number(directStart.lat),lon:Number(directStart.lon)},Number(directAz),Number(directDist));
-                    setDirectResult(r); showToast("Yangi nuqta topildi!");
-                  } catch(e:any){showToast(e.message);}
-                }}>
-                  <ChevronRight className="w-4 h-4 text-black" /> {tr(language,"Nuqta topish","Найти точку","Find Point")}
-                </PrimaryBtn>
-                {directResult && (
-                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
-                    <StatChip label="Lat" value={directResult.lat.toFixed(7)} accent />
-                    <StatChip label="Lon" value={directResult.lon.toFixed(7)} accent />
-                  </div>
-                )}
-              </LiquidCard>
-            </div>
-          )}
-
-          {/* ──────────── MODULE: CONVERTER ──────────── */}
-          {activeModule==="converter" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader title={<><RefreshCw className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Koordinatalar Konvertori","Конвертер координат","Coordinate Converter")}</>} />
-              <LiquidCard className="p-6 md:p-8 space-y-5">
-                <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">O'nli gradus → DMS (GMS)</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Field label="Lat DD" value={convLat} onChange={setConvLat} />
-                    <div className="text-xs font-mono font-bold text-[var(--accent)] mt-2 px-2">
-                      {Number.isFinite(Number(convLat)) ? toDMS(Number(convLat),"lat") : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <Field label="Lon DD" value={convLon} onChange={setConvLon} />
-                    <div className="text-xs font-mono font-bold text-[var(--accent)] mt-2 px-2">
-                      {Number.isFinite(Number(convLon)) ? toDMS(Number(convLon),"lon") : "—"}
-                    </div>
-                  </div>
-                </div>
-              </LiquidCard>
-
-              <LiquidCard className="p-6 md:p-8 space-y-4">
-                <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">Ommaviy (Batch) Ro'yxat Konvertori</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <textarea rows={6} value={batchIn} onChange={e=>setBatchIn(e.target.value)}
-                    className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs outline-none focus:border-[var(--accent)] resize-none shadow-inner" />
-                  <textarea rows={6} readOnly value={batchOut} placeholder={tr(language,"Natijalar...","Результаты...","Results...")}
-                    className="w-full px-4 py-3 rounded-[20px] bg-white/10 border border-[var(--border-glass)] font-mono text-xs text-[var(--accent)] resize-none outline-none shadow-inner" />
-                </div>
-                <PrimaryBtn onClick={() => {
-                  try {
-                    const pts = parseCoordinates(batchIn);
-                    setBatchOut(pts.map((p,i)=>`#${i+1}: ${toDMS(p.lat,"lat")} | ${toDMS(p.lon,"lon")}`).join("\n"));
-                    showToast("Konvertatsiya qilindi!");
-                  } catch(e:any){showToast(e.message);}
-                }}>Barchasini GMS ga o'girish</PrimaryBtn>
-              </LiquidCard>
-            </div>
-          )}
-
-          {/* ──────────── MODULE: SHAPES ──────────── */}
-          {activeModule==="shapes" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader title={<><Triangle className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Sodda Geometrik Shakllar","Простые фигуры","Simple Shapes")}</>} />
-
-              <div className="flex flex-wrap gap-2 p-1.5 liquid-pill w-fit">
-                {[{v:"rect",l:tr(language,"To'rtburchak","Прямоугольник","Rectangle")},{v:"tri",l:tr(language,"Uchburchak","Треугольник","Triangle")},{v:"trap",l:tr(language,"Trapetsiya","Трапеция","Trapezoid")},{v:"circ",l:tr(language,"Doira","Окружность","Circle")},{v:"pit",l:tr(language,"Kotlovan","Котлован","Pit")}].map(s=>(
-                  <button key={s.v} onClick={()=>setShapeType(s.v as any)}
-                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${shapeType===s.v?"bg-white text-black shadow-md":"text-[var(--muted)] hover:text-[var(--text)]"}`}>{s.l}</button>
-                ))}
               </div>
-
-              <LiquidCard className="p-6 md:p-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    {shapeType==="rect" && <><Field label="Eni a (m)" value={String(sp.w)} onChange={v=>setSp({...sp,w:Number(v)})} type="number" /><Field label="Bo'yi b (m)" value={String(sp.l)} onChange={v=>setSp({...sp,l:Number(v)})} type="number" /></>}
-                    {shapeType==="tri" && <><Field label="a (m)" value={String(sp.a)} onChange={v=>setSp({...sp,a:Number(v)})} type="number" /><Field label="b (m)" value={String(sp.b)} onChange={v=>setSp({...sp,b:Number(v)})} type="number" /><Field label="c (m)" value={String(sp.c)} onChange={v=>setSp({...sp,c:Number(v)})} type="number" /></>}
-                    {shapeType==="trap" && <><Field label="a (m)" value={String(sp.a)} onChange={v=>setSp({...sp,a:Number(v)})} type="number" /><Field label="b (m)" value={String(sp.b)} onChange={v=>setSp({...sp,b:Number(v)})} type="number" /><Field label="h (m)" value={String(sp.h)} onChange={v=>setSp({...sp,h:Number(v)})} type="number" /></>}
-                    {shapeType==="circ" && <Field label="Radius R (m)" value={String(sp.r)} onChange={v=>setSp({...sp,r:Number(v)})} type="number" />}
-                    {shapeType==="pit" && <><Field label="S1 (yuqori m²)" value={String(sp.topArea)} onChange={v=>setSp({...sp,topArea:Number(v)})} type="number" /><Field label="S2 (tub m²)" value={String(sp.bottomArea)} onChange={v=>setSp({...sp,bottomArea:Number(v)})} type="number" /><Field label="Chuqurlik H (m)" value={String(sp.depth)} onChange={v=>setSp({...sp,depth:Number(v)})} type="number" /></>}
-                  </div>
-                  <div className="flex flex-col justify-center space-y-3">
-                    {shapeResult?.area != null && <StatChip label="Maydon" value={`${shapeResult.area} m² (${(shapeResult.area/100).toFixed(2)} sotix)`} accent />}
-                    {shapeResult?.perimeter != null && <StatChip label="Perimetr" value={`${shapeResult.perimeter} m`} />}
-                    {shapeResult?.volume != null && <StatChip label="Hajm" value={`${shapeResult.volume} m³`} />}
-                  </div>
-                </div>
-              </LiquidCard>
             </div>
           )}
 
-          {/* ──────────── MODULE: SLOPE ──────────── */}
-          {activeModule==="slope" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader title={<><TrendingUp className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Nivelirlash va Nishablik","Нивелирование и Уклон","Leveling & Slope")}</>} />
-
-              <LiquidCard className="p-6 md:p-8 space-y-4">
-                <div className="text-xs font-black text-[var(--accent)] uppercase tracking-wider">1. Nishablikni hisoblash</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Δh (m)" value={slopeH} onChange={setSlopeH} type="number" />
-                  <Field label="d (m)" value={slopeD} onChange={setSlopeD} type="number" />
-                </div>
-                <PrimaryBtn onClick={() => {
-                  try { const r=calculateSlope(Number(slopeH),Number(slopeD)); setSlopeRes(r); addHistory({type:"slope",title:"Nishablik",value:`${r.slopePercent}%`}); showToast("Hisoblandi!"); }
-                  catch(e:any){showToast(e.message);}
-                }}>
-                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Hisoblash","Рассчитать","Calculate")}
-                </PrimaryBtn>
-                {slopeRes && (
-                  <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/10">
-                    <StatChip label="%" value={slopeRes.slopePercent+"%"} accent />
-                    <StatChip label="‰" value={slopeRes.slopePromille+"‰"} />
-                    <StatChip label="°" value={slopeRes.slopeAngleDeg+"°"} />
-                    <StatChip label="Nisbat" value={slopeRes.ratioString} />
-                  </div>
-                )}
-              </LiquidCard>
-
-              <LiquidCard className="p-6 md:p-8 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-black text-[var(--blue)] uppercase tracking-wider">2. Nivelirlash jurnali</div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-[var(--muted)] font-bold">Reper (BM):</span>
-                    <input type="number" value={bmVal} onChange={e=>setBmVal(e.target.value)}
-                      className="w-20 px-3 py-1.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs font-mono outline-none focus:border-[var(--accent)]" />
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left font-mono">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        {["Nuqta","BS","IS","FS","HI","RL","Izoh"].map(h=>(
-                          <th key={h} className="px-3 py-2.5 text-[var(--muted)] font-bold font-sans text-[10px] uppercase">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {levelTable.map(row=>(
-                        <tr key={row.id} className="border-b border-white/5">
-                          <td className="px-3 py-2 font-bold text-[var(--accent)]">{row.stationName}</td>
-                          <td className="px-3 py-2">{row.backsight ?? "—"}</td>
-                          <td className="px-3 py-2">{row.intermediate ?? "—"}</td>
-                          <td className="px-3 py-2">{row.foresight ?? "—"}</td>
-                          <td className="px-3 py-2 font-bold text-[var(--blue)]">{row.heightOfInstrument?.toFixed(3)}</td>
-                          <td className="px-3 py-2 font-bold text-[var(--text)]">{row.reducedLevel?.toFixed(3)}</td>
-                          <td className="px-3 py-2 text-[var(--muted-2)] font-sans">{row.remark ?? ""}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <PrimaryBtn onClick={() => {
-                  try { const r=solveDifferentialLeveling(Number(bmVal),levelRows); setLevelTable(r); showToast("Jurnal hisoblandi!"); }
-                  catch(e:any){showToast(e.message);}
-                }}>
-                  <Calculator className="w-4 h-4 text-black" /> {tr(language,"Jurnalni hisoblash","Рассчитать журнал","Calculate Journal")}
-                </PrimaryBtn>
-              </LiquidCard>
-            </div>
-          )}
-
-          {/* ──────────── MODULE: VOLUME ──────────── */}
-          {activeModule==="volume" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader title={<><BoxIcon className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Yer ishlari hajmi (TIN Cut & Fill)","Объём Cut & Fill (TIN)","Volume Cut & Fill (TIN)")}</>} />
-
-              <LiquidCard className="p-6 md:p-8 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* MODULE 3: CONVERTER */}
+          {activeModule === "converter" && (
+            <div className="space-y-4 font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><RefreshCw className="w-5 h-5 text-amber-400" /> Koordinata Konvertori (DD ↔ DMS)</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">O‘nli gradus va GMS o‘zaro aylantirish</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-bold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Koordinata turi","Координаты","Coord Type")}</label>
-                    <select value={volCoord} onChange={e=>setVolCoord(e.target.value as any)}
-                      className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs text-[var(--text)] outline-none">
-                      <option value="local">Metrik (X Y Z)</option>
-                      <option value="wgs84">WGS84 (Lat Lon Z)</option>
-                    </select>
+                    <label className="text-[10px] text-neutral-400">Lat (DD)</label>
+                    <input type="text" inputMode="decimal" value={convLat} onChange={(e) => setConvLat(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
+                    <div className="text-xs font-bold text-emerald-400 mt-1">{toDMS(parseFloat(convLat) || 0, "lat")}</div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-[var(--muted)] uppercase mb-1.5">{tr(language,"Loyiha turi","Тип проекта","Design Mode")}</label>
-                    <select value={volDesign} onChange={e=>setVolDesign(e.target.value as any)}
-                      className="w-full px-4 py-2.5 rounded-full bg-white/5 border border-[var(--border-glass)] text-xs text-[var(--text)] outline-none">
-                      <option value="level">Yagona sath</option>
-                      <option value="per-point">Har bir nuqta</option>
-                    </select>
+                    <label className="text-[10px] text-neutral-400">Lon (DD)</label>
+                    <input type="text" inputMode="decimal" value={convLon} onChange={(e) => setConvLon(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
+                    <div className="text-xs font-bold text-emerald-400 mt-1">{toDMS(parseFloat(convLon) || 0, "lon")}</div>
                   </div>
-                  {volDesign==="level" && <Field label="Loyiha sathi Z (m)" value={volLevel} onChange={setVolLevel} type="number" />}
                 </div>
-
-                <textarea rows={7} value={volIn} onChange={e=>setVolIn(e.target.value)}
-                  className="w-full px-4 py-3 rounded-[20px] bg-white/5 border border-[var(--border-glass)] font-mono text-xs outline-none focus:border-[var(--accent)] resize-y shadow-inner" />
-
-                {volError && <div className="px-4 py-2.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-[var(--danger)] text-xs font-semibold">{volError}</div>}
-
-                <PrimaryBtn onClick={() => {
-                  try {
-                    const rows = parseVolumeRows(volIn,volCoord,volDesign,Number(volLevel));
-                    const r = calculateCutFill(rows);
-                    setVolResult(r); setVolError(null);
-                    addHistory({type:"volume",title:"Cut & Fill",value:`Cut:${r.cut.toFixed(1)}m³ Fill:${r.fill.toFixed(1)}m³`});
-                    showToast("Hajm hisoblandi!");
-                  } catch(e:any){setVolError(e.message);setVolResult(null);}
-                }} className="w-full">
-                  <BoxIcon className="w-4 h-4 text-black" /> TIN bilan hisoblash
-                </PrimaryBtn>
-
-                {volResult && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/10">
-                    <div className="p-3.5 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-center">
-                      <div className="text-[10px] font-bold text-[var(--danger)] uppercase mb-0.5">Qazish (Cut)</div>
-                      <div className="text-base font-black text-[var(--danger)]">{volResult.cut.toFixed(2)} m³</div>
-                    </div>
-                    <div className="p-3.5 rounded-full bg-[var(--blue-soft)] border border-[var(--blue)]/30 text-center">
-                      <div className="text-[10px] font-bold text-[var(--blue)] uppercase mb-0.5">To'kish (Fill)</div>
-                      <div className="text-base font-black text-[var(--blue)]">{volResult.fill.toFixed(2)} m³</div>
-                    </div>
-                    <StatChip label="Sof hajm" value={(volResult.net>0?"+":"")+volResult.net.toFixed(2)+" m³"} />
-                    <StatChip label="Plan maydon" value={volResult.planArea.toFixed(1)+" m²"} accent />
-                  </div>
-                )}
-              </LiquidCard>
+              </div>
             </div>
           )}
 
-          {/* ──────────── MODULE: GEOAI (BETA - TEKIN) ──────────── */}
-          {activeModule==="geoai" && (
-            <div className="flex flex-col h-[calc(100vh-140px)]">
-              <SectionHeader
-                title={
-                  <div className="flex items-center gap-3">
-                    <Sparkles className="w-6 h-6 text-[var(--accent)]" />
-                    <span>GeoAI</span>
-                    <span className="text-xs font-black px-3 py-1 rounded-full liquid-btn-primary text-black shadow-md">
-                      BETA · Hozircha tekin
-                    </span>
-                  </div>
-                }
-                subtitle={tr(
-                  language,
-                  "Har qanday savolga javob beruvchi, rasm va fayl tahlil qiladigan universal sun'iy intellekt yordamchi. BETA davrida barcha uchun mutlaqo bepul!",
-                  "Универсальный AI-ассистент: ответы на любые вопросы, анализ изображений и файлов. В период BETA бесплатно для всех!",
-                  "Universal AI assistant: answers any question, analyzes images and files. Completely free during BETA!"
-                )}
-              />
-              <LiquidCard className="flex-1 overflow-hidden flex flex-col p-0">
-                <GeoAIChat language={language} currentUser={currentUser} />
-              </LiquidCard>
-            </div>
-          )}
-
-          {/* ──────────── MODULE: CONTACTS ──────────── */}
-          {activeModule==="contacts" && (
-            <div className="max-w-2xl space-y-6">
-              <SectionHeader title={<><Phone className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Bog'lanish va Muallif","Контакты автора","Author & Contacts")}</>} />
-
-              <LiquidCard className="p-8 space-y-6">
-                <div className="flex items-center gap-5 pb-6 border-b border-white/10">
-                  <div className="w-18 h-18 rounded-full bg-gradient-to-br from-[var(--accent)] via-[#00e5ff] to-[var(--blue)] flex items-center justify-center text-2xl font-black text-black shadow-xl border border-white/60">
-                    TA
+          {/* MODULE 4: CADASTRE (YANGI) */}
+          {activeModule === "cadastre" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><Sprout className="w-5 h-5 text-emerald-400" /> Kadastr & Qishloq Xo‘jaligi Yer Kalkulyatori</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">Yer bahosi, ekin hosildorligi, suv sarfi va soliq me’yori</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3 font-mono">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-neutral-400">Maydon (Sotixda)</label>
+                    <input type="number" value={cadastreArea} onChange={(e) => setCadastreArea(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
                   </div>
                   <div>
-                    <div className="text-xl font-black text-[var(--text)]">Toirov Azizbek</div>
-                    <div className="text-xs text-[var(--accent)] font-bold mt-0.5">GeoCalc asoschisi va dasturchi muhandisi</div>
-                    <div className="text-[11px] text-[var(--muted)] mt-1">Powered by Toirov Azizbek</div>
+                    <label className="text-[10px] text-neutral-400">1 Sotix Bahosi ($)</label>
+                    <input type="number" value={cadastrePricePerSotix} onChange={(e) => setCadastrePricePerSotix(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" />
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {[
-                    { href:"mailto:deartairov@gmail.com", icon:Mail, label:"Email", value:"deartairov@gmail.com", color:"var(--accent)" },
-                    { href:"https://t.me/dearr5", icon:Send, label:"Telegram", value:"@dearr5", color:"var(--blue)" },
-                    { href:"tel:+998958300142", icon:Phone, label:"Telefon", value:"+998 95 830-01-42", color:"var(--warning)" },
-                  ].map(c=>(
-                    <a key={c.label} href={c.href} target={c.href.startsWith("http")?"_blank":undefined} rel="noreferrer"
-                      className="p-5 rounded-[24px] liquid-pill flex flex-col items-center text-center group transition-all">
-                      <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform shadow-md" style={{color:c.color}}>
-                        <c.icon className="w-5 h-5" />
-                      </div>
-                      <div className="text-[10px] text-[var(--muted)] uppercase font-black">{c.label}</div>
-                      <div className="text-xs font-bold text-[var(--text)] mt-1 break-all">{c.value}</div>
-                    </a>
+                <div className="grid grid-cols-2 gap-1.5 font-sans">
+                  {[ { id: "cotton", l: "Paxtachilik" }, { id: "wheat", l: "G‘allachilik" }, { id: "orchard", l: "Meva bog‘i" }, { id: "greenhouse", l: "Issiqxona" } ].map((c) => (
+                    <button key={c.id} onClick={() => setCropType(c.id as any)} className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${cropType === c.id ? "bg-emerald-500 text-black shadow-md" : "bg-white/5 text-neutral-400 hover:text-white"}`}>{c.l}</button>
                   ))}
                 </div>
-              </LiquidCard>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center"><div className="text-[9px] font-bold text-emerald-400 uppercase">Yer Bahosi</div><div className="text-sm font-black text-emerald-400">${formatNumber(cadastreMetrics.totalLandValue)}</div></div>
+                  <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[9px] font-bold text-neutral-400 uppercase">Kutilgan Hosil</div><div className="text-sm font-black text-white">{cadastreMetrics.expectedYieldTons.toFixed(1)} tonna</div></div>
+                  <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[9px] font-bold text-neutral-400 uppercase">Suv Sarfi (m³)</div><div className="text-sm font-black text-blue-400">{formatNumber(cadastreMetrics.waterUsageM3)} m³</div></div>
+                  <div className="p-3 rounded-xl bg-white/5 text-center"><div className="text-[9px] font-bold text-neutral-400 uppercase">Yillik Yer Solig‘i</div><div className="text-sm font-black text-amber-400">{formatNumber(cadastreMetrics.estimatedTaxUZS)} so‘m</div></div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* ──────────── MODULE: GUIDE ──────────── */}
-          {activeModule==="guide" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeader title={<><Info className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Qo'llanma va Formulalar","Справка и формулы","User Guide & Formulas")}</>} />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  {t:"1. Maydon — WGS84 & UTM",c:"WGS84 koordinatalari UTM 41N/42N/43N zonalariga proyeksiyalanib, Gauss-Krüger formulasi orqali hisoblanadi.",col:"accent"},
-                  {t:"2. Vincenty Masofa va Azimut",c:"Ellipsoidal formula orqali ikki nuqta orasidagi masofa va azimut 0.5 mm aniqlikda hisoblanadi.",col:"blue"},
-                  {t:"3. TIN Cut & Fill Hajmi",c:"Delaunay triangulyatsiyasi orqali tuproq qazish va to'kish hajmi 3D prizmalar yordamida aniqlanadi.",col:"warning"},
-                ].map(g=>(
-                  <LiquidCard key={g.t} className="p-6 space-y-2">
-                    <div className={`text-sm font-black ${g.col==="accent"?"text-[var(--accent)]":g.col==="blue"?"text-[var(--blue)]":"text-[var(--warning)]"}`}>{g.t}</div>
-                    <p className="text-xs text-[var(--muted)] leading-relaxed font-medium">{g.c}</p>
-                  </LiquidCard>
+          {/* MODULE 5: GPS TRACKER (YANGI) */}
+          {activeModule === "gps_tracker" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><Navigation className="w-5 h-5 text-cyan-400" /> Jonli GPS O‘lchash (Walk & Measure)</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">Maydon chegarasi bo‘ylab yurganda nuqtalar avtomatik yoziladi</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3 font-mono">
+                <button onClick={toggleGpsTracking} className={`w-full py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all ${isTracking ? "bg-red-500 hover:bg-red-400 text-white shadow-lg animate-pulse" : "bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg"}`}>{isTracking ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}{isTracking ? "GPS O‘lchashni to‘xtatish" : "Jonli GPS O‘lchashni boshlash"}</button>
+                {currentGpsPos && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/10 text-center">
+                    <div className="p-2.5 rounded-xl bg-white/5"><div className="text-[9px] text-neutral-400">Aniqlik</div><div className="text-xs font-bold text-emerald-400">±{currentGpsPos.acc} m</div></div>
+                    <div className="p-2.5 rounded-xl bg-white/5"><div className="text-[9px] text-neutral-400">Tezlik</div><div className="text-xs font-bold text-white">{currentGpsPos.speed} km/h</div></div>
+                    <div className="p-2.5 rounded-xl bg-white/5"><div className="text-[9px] text-neutral-400">Balandlik</div><div className="text-xs font-bold text-blue-400">{currentGpsPos.alt} m</div></div>
+                    <div className="p-2.5 rounded-xl bg-white/5"><div className="text-[9px] text-neutral-400">Yozilgan</div><div className="text-xs font-bold text-amber-400">{gpsTrackLog.length} nuqta</div></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MODULE 6: SHAPES */}
+          {activeModule === "shapes" && (
+            <div className="space-y-4 font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><Triangle className="w-5 h-5 text-indigo-400" /> Sodda Geometrik Shakllar</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">To‘rtburchak, Heron uchburchagi, trapetsiya va doira</p>
+              </div>
+              <div className="flex flex-wrap gap-1 p-1 rounded-2xl bg-white/5 border border-white/10 font-sans">
+                {[ { id: "rect", l: "To‘rtburchak" }, { id: "tri", l: "Uchburchak" }, { id: "trap", l: "Trapetsiya" }, { id: "circ", l: "Doira" } ].map((s) => (
+                  <button key={s.id} onClick={() => setShapeType(s.id as any)} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${shapeType === s.id ? "bg-white text-black shadow-md" : "text-neutral-400 hover:text-white"}`}>{s.l}</button>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* ──────────── MODULE: HISTORY ──────────── */}
-          {activeModule==="history" && (
-            <div className="max-w-3xl space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <SectionHeader title={<><History className="inline w-6 h-6 text-[var(--accent)] mr-2 mb-0.5" />{tr(language,"Hisob-kitoblar tarixi","История расчётов","Calculations History")}</>} />
-                {historyList.length>0 && (
-                  <button onClick={()=>{setHistoryList([]);localStorage.removeItem("geocalc_history");showToast("Tarix tozalandi!");}}
-                    className="px-4 py-2 rounded-full bg-[var(--danger-soft)] border border-[var(--danger)]/30 text-xs text-[var(--danger)] font-bold">{tr(language,"Tozalash","Очистить","Clear")}</button>
-                )}
-              </div>
-              <div className="space-y-2.5">
-                {historyList.length>0 ? historyList.map(item=>(
-                  <div key={item.id} className="px-5 py-4 rounded-full liquid-pill flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] font-black text-[var(--accent)] uppercase">{item.title}</div>
-                      <div className="text-sm font-bold text-[var(--text)] font-mono mt-0.5">{item.value}</div>
-                    </div>
-                    <div className="text-[11px] text-[var(--muted-2)] font-mono flex-shrink-0">{item.time}</div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                {shapeType === "rect" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-[10px] text-neutral-400">Eni a (m)</label><input type="number" value={sp.w} onChange={(e) => setSp({ ...sp, w: parseFloat(e.target.value) })} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" /></div>
+                    <div><label className="text-[10px] text-neutral-400">Bo‘yi b (m)</label><input type="number" value={sp.l} onChange={(e) => setSp({ ...sp, l: parseFloat(e.target.value) })} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" /></div>
                   </div>
-                )) : (
-                  <LiquidCard className="p-12 text-center text-sm text-[var(--muted)] font-medium">
-                    {tr(language,"Hali hech qanday hisob-kitob saqlanmagan","История пуста","No history yet")}
-                  </LiquidCard>
+                )}
+                {shapeResult && (
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-center">
+                    {shapeResult.area !== undefined && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30"><div className="text-[9px] font-bold text-emerald-400">Maydon</div><div className="text-sm font-black text-emerald-400">{shapeResult.area} m² ({(shapeResult.area / 100).toFixed(2)} sotix)</div></div>}
+                    {shapeResult.perimeter !== undefined && <div className="p-3 rounded-xl bg-white/5"><div className="text-[9px] font-bold text-neutral-400">Perimetr</div><div className="text-sm font-black text-white">{shapeResult.perimeter} m</div></div>}
+                  </div>
                 )}
               </div>
             </div>
           )}
 
+          {/* MODULE 7: SLOPE */}
+          {activeModule === "slope" && (
+            <div className="space-y-4 font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-teal-400" /> Nivelirlash & Nishablik</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">Balandlik ayirmasi, qiyalik foizi va stansiya hisoblari</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="text-[10px] text-neutral-400">Balandlik Δh (m)</label><input type="number" value={slopeH} onChange={(e) => setSlopeH(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" /></div>
+                  <div><label className="text-[10px] text-neutral-400">Masofa d (m)</label><input type="number" value={slopeD} onChange={(e) => setSlopeD(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white" /></div>
+                </div>
+                <button onClick={() => { const r = calculateSlope(parseFloat(slopeH), parseFloat(slopeD)); setSlopeRes(r); addHistory({ type: "slope", title: "Nishablik", value: r.slopePercent + "%" }); showToast("Hisoblandi!"); }} className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-black text-xs">Hisoblash</button>
+                {slopeRes && (
+                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/10 text-center">
+                    <div className="p-2 rounded-xl bg-white/5"><div className="text-[8px] text-neutral-400">%</div><div className="text-xs font-bold text-emerald-400">{slopeRes.slopePercent}%</div></div>
+                    <div className="p-2 rounded-xl bg-white/5"><div className="text-[8px] text-neutral-400">‰</div><div className="text-xs font-bold text-white">{slopeRes.slopePromille}‰</div></div>
+                    <div className="p-2 rounded-xl bg-white/5"><div className="text-[8px] text-neutral-400">°</div><div className="text-xs font-bold text-blue-400">{slopeRes.slopeAngleDeg}°</div></div>
+                    <div className="p-2 rounded-xl bg-white/5"><div className="text-[8px] text-neutral-400">Nisbat</div><div className="text-xs font-bold text-amber-400">{slopeRes.ratioString}</div></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MODULE 8: VOLUME */}
+          {activeModule === "volume" && (
+            <div className="space-y-4 font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><BoxIcon className="w-5 h-5 text-rose-400" /> Yer Ishlari Hajmi (TIN Cut & Fill)</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">Delaunay triangulyatsiyasi orqali tuproq hajmi</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                <textarea rows={4} value={volIn} onChange={(e) => setVolIn(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white resize-none" />
+                <button onClick={() => { try { const rows = parseVolumeRows(volIn, volCoord, volDesign, parseFloat(volLevel)); const r = calculateCutFill(rows); setVolResult(r); addHistory({ type: "volume", title: "TIN Cut & Fill", value: "Cut:" + r.cut.toFixed(1) + "m³ | Fill:" + r.fill.toFixed(1) + "m³" }); showToast("Hajm hisoblandi!"); } catch (e: any) { showToast(e.message); } }} className="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs">TIN Hajmini hisoblash</button>
+                {volResult && (
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center">
+                    <div className="p-2 rounded-xl bg-red-500/15 border border-red-500/30"><div className="text-[8px] text-red-400">Qazish (Cut)</div><div className="text-xs font-black text-red-400">{volResult.cut.toFixed(1)} m³</div></div>
+                    <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/30"><div className="text-[8px] text-blue-400">To‘kish (Fill)</div><div className="text-xs font-black text-blue-400">{volResult.fill.toFixed(1)} m³</div></div>
+                    <div className="p-2 rounded-xl bg-white/5"><div className="text-[8px] text-neutral-400">Plan m²</div><div className="text-xs font-black text-emerald-400">{volResult.planArea.toFixed(0)} m²</div></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MODULE 9: GEOAI */}
+          {activeModule === "geoai" && (
+            <div className="h-[560px] rounded-3xl overflow-hidden liquid-glass flex flex-col border border-white/15">
+              <GeoAIChat language={language} currentUser={currentUser} />
+            </div>
+          )}
+
+
+          {/* MODULE 11: GUIDE */}
+          {activeModule === "guide" && (
+            <div className="space-y-4 text-xs font-mono">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><BookOpen className="w-5 h-5 text-cyan-400" /> Formula Qo‘llanmasi</h2>
+                <p className="text-xs text-neutral-400 mt-0.5 font-sans">Geodezik formulalar va matematik modellar</p>
+              </div>
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1"><div className="font-bold text-emerald-400 font-sans">1. Gauss Maydon Formulasi</div><div className="text-neutral-300">{"S = 0.5 * |Σ (X_i * (Y_i+1 - Y_i-1))|"}</div></div>
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1"><div className="font-bold text-blue-400 font-sans">2. Nishablik Formulasi</div><div className="text-neutral-300">{"i = (Δh / d) * 100% | α = arctan(Δh / d)"}</div></div>
+              </div>
+            </div>
+          )}
+
+          {/* MODULE 12: CONTACTS */}
+          {activeModule === "contacts" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2"><Phone className="w-5 h-5 text-emerald-400" /> Muallif & Aloqa</h2>
+                <p className="text-xs text-neutral-400 mt-0.5">Rasmiy ishlab chiquvchi va qo‘llab-quvvatlash</p>
+              </div>
+              <div className="p-5 rounded-3xl bg-white/5 border border-white/10 space-y-4">
+                <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-black font-black text-base flex items-center justify-center shadow-lg">TA</div>
+                  <div>
+                    <div className="text-base font-black text-white">Toirov Azizbek</div>
+                    <div className="text-xs text-emerald-400 font-bold">GeoCalc Asoschisi & Dasturchi</div>
+                    <div className="text-[10px] text-neutral-400">Powered by Toirov Azizbek</div>
+                  </div>
+                </div>
+                <div className="space-y-2 text-xs font-mono">
+                  <a href="mailto:deartairov@gmail.com" className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center gap-2 text-white block">✉️ deartairov@gmail.com</a>
+                  <a href="https://t.me/dearr5" target="_blank" rel="noreferrer" className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center gap-2 text-blue-400 block">✈️ Telegram: @dearr5</a>
+                  <a href="tel:+998958300142" className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 flex items-center gap-2 text-amber-400 block">📞 +998 95 830-01-42</a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODULE 13: HISTORY */}
+          {activeModule === "history" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2"><History className="w-5 h-5 text-amber-400" /> Hisob-kitoblar Tarixi</h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">Avtomatik saqlangan amallar</p>
+                </div>
+                {historyList.length > 0 && (
+                  <button onClick={() => { setHistoryList([]); localStorage.removeItem("geocalc_history"); showToast("Tarix tozalandi"); }} className="px-2.5 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs font-bold">Tozalash</button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {historyList.length > 0 ? (
+                  historyList.map((h) => (
+                    <div key={h.id} className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between font-mono text-xs">
+                      <div><div className="text-[10px] text-emerald-400 font-bold uppercase">{h.title}</div><div className="text-white font-bold mt-0.5">{h.value}</div></div>
+                      <div className="text-[10px] text-neutral-400">{h.time}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 rounded-2xl bg-white/5 text-center text-xs text-neutral-400">Hozircha hech qanday hisob saqlanmagan</div>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* RIGHT WORKSPACE: INTERACTIVE MAP CANVAS */}
+        <main className="flex-1 h-full min-h-[350px] relative overflow-hidden bg-black">
+          <div className="w-full h-full">
+            <InteractiveMap initialPoints={points} onPointsChange={handleMapPointsChange} language={language} mode={mapMode} baseLayer={baseLayer} hideInternalHUD={true} />
           </div>
 
-          {/* ── FOOTER (POWERED BY TOIROV AZIZBEK) ─────────────────────────── */}
-          <footer className="mt-12 px-6 py-8 border-t border-white/10 flex flex-col items-center gap-3 text-center">
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--muted)] font-semibold">
-              <a href="mailto:deartairov@gmail.com" className="hover:text-[var(--accent)] transition-colors flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-[var(--accent)]" /> deartairov@gmail.com
-              </a>
-              <span>·</span>
-              <a href="https://t.me/dearr5" target="_blank" rel="noreferrer" className="hover:text-[var(--blue)] transition-colors flex items-center gap-1.5">
-                <Send className="w-3.5 h-3.5 text-[var(--blue)]" /> @dearr5
-              </a>
-              <span>·</span>
-              <a href="tel:+998958300142" className="hover:text-[var(--warning)] transition-colors flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-[var(--warning)]" /> +998 95 830-01-42
-              </a>
+          {/* FLOATING RESULT BADGE */}
+          {polygonMetrics && (
+            <div onClick={() => { if (unitMode === "m2") setUnitMode("sotix"); else if (unitMode === "sotix") setUnitMode("ha"); else setUnitMode("m2"); }}
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-20 cursor-pointer liquid-pill px-5 py-2.5 flex items-center gap-3 shadow-2xl border border-emerald-400/50 hover:scale-[1.02] transition-transform">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <div className="font-mono text-sm font-black text-emerald-400">
+                {unitMode === "m2" ? formatNumber(polygonMetrics.areaM2) + " m²" : unitMode === "sotix" ? polygonMetrics.areaSotix.toFixed(2) + " sotix" : polygonMetrics.areaHectares.toFixed(4) + " ha"}
+              </div>
+              <div className="font-mono text-xs text-blue-400 font-bold pl-2 border-l border-white/20">{polygonMetrics.perimeterMeters.toFixed(1)} m</div>
             </div>
-            <div className="text-sm font-black text-[var(--text)]">
-              Powered by <span className="text-[var(--accent)]">Toirov Azizbek</span>
-            </div>
-            <div className="text-[11px] text-[var(--muted-2)]">
-              GeoCalc — Geodezik va topografik hisoblash platformasi © {new Date().getFullYear()}
-            </div>
-          </footer>
+          )}
+
+          {/* RIGHT TOOLBAR: LAYERS, UNDO, CLEAR */}
+          <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+            <button onClick={() => { setBaseLayer(b => b === "satellite" ? "osm" : b === "osm" ? "dark" : "satellite"); showToast("Qatlam almashtirildi"); }}
+              className="w-11 h-11 rounded-2xl liquid-pill flex items-center justify-center text-white shadow-xl hover:scale-105 transition-transform" title="Qatlam">
+              <Layers className="w-5 h-5 text-emerald-400" />
+            </button>
+            {points.length > 0 && (
+              <>
+                <button onClick={() => setPoints(p => p.slice(0, -1))} className="w-11 h-11 rounded-2xl liquid-pill flex items-center justify-center text-white shadow-xl hover:scale-105 transition-transform" title="Qaytarish">
+                  <Undo2 className="w-5 h-5 text-white" />
+                </button>
+                <button onClick={() => { setPoints([]); setAreaInput(""); }} className="w-11 h-11 rounded-2xl bg-red-500/80 text-white flex items-center justify-center shadow-xl hover:scale-105 transition-transform" title="Tozalash">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </button>
+              </>
+            )}
+          </div>
         </main>
       </div>
     </div>
